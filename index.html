@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Learning Hub · BGA × BIST</title>
+
+    <!-- Fonts: Space Grotesk (display / numerals), Manrope (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- KaTeX for clean math rendering. If the CDN is unreachable, MathText
+         falls back to legible plain-text/unicode, so the exam still works. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+
+    <style>
+      * { box-sizing: border-box; }
+      html, body, #root { height: 100%; }
+      body {
+        margin: 0;
+        background: #0b0d10;
+        font-family: 'Manrope', sans-serif;
+        color: #f4f6f8;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::-webkit-scrollbar { width: 9px; height: 9px; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+      ::selection { background: rgba(255,200,61,0.3); }
+
+      @keyframes qgspin { to { transform: rotate(360deg); } }
+      @keyframes qgbloom { 0%,100% { transform: translate(0,0); } 50% { transform: translate(2%,1.5%); } }
+      @keyframes qgfade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes qgshim { 0% { background-position: -220% 0; } 100% { background-position: 220% 0; } }
+      @keyframes qgblink { 50% { opacity: 0; } }
+      @keyframes qgslide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      @keyframes qgpop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
