@@ -71,6 +71,21 @@ src/
     AskAIPanel.jsx        question-scoped tutor (integrity-aware)
 ```
 
+## Deploy to GitHub Pages
+
+`.github/workflows/deploy-pages.yml` builds the app and deploys it on every push
+to `main`. It auto-enables Pages (`actions/configure-pages` with
+`enablement: true`) and serves from `/<repo-name>/` (the workflow sets
+`VITE_BASE`). In the repo settings, **Settings → Pages → Build and deployment →
+Source** should be **GitHub Actions** (the workflow sets this automatically).
+
+> **Caveat:** GitHub Pages is static hosting, so the `/api/anthropic` proxy
+> doesn't exist there. The exam still works end to end — MCQ + local
+> equivalence grading — but **AI grading and the tutor run in offline-fallback
+> mode** on Pages, because there's no server to inject the API key. For the live
+> AI path, run it on a host that executes `vite.config.js` (e.g. `npm run dev`
+> with `ANTHROPIC_API_KEY` set, or any Node host).
+
 ## Notes
 
 - React state only — no `localStorage` / `sessionStorage`.

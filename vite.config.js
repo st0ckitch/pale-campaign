@@ -63,6 +63,9 @@ function anthropicProxy() {
 }
 
 export default defineConfig({
+  // On GitHub Pages the site is served from /<repo-name>/. The deploy workflow
+  // sets VITE_BASE accordingly; locally it stays at '/'.
+  base: process.env.VITE_BASE || '/',
   plugins: [react(), anthropicProxy()],
   server: { host: true, port: 5173 },
   preview: { host: true, port: 4173 },
