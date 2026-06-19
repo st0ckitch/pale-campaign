@@ -10,7 +10,7 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
   const active = store.exams.find((e) => e.id === activeId)
 
   if (active) {
-    const questions = resolveQuestions(active)
+    const questions = resolveQuestions(active).map((q) => ({ ...q, subject: q.subject || active.subject }))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <button

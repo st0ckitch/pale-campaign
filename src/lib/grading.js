@@ -98,11 +98,14 @@ export function checkLocally(studentRaw, acceptedAnswers = []) {
 // ===========================================================================
 
 const GRADER_SYSTEM =
-  "You are a precise math grader. Determine if the student's answer is " +
-  'mathematically equivalent to the correct answer, even if written in a ' +
-  'different form (fractions, decimals, factored vs expanded, with/without ' +
-  'units). Award partial credit for correct method with a minor arithmetic ' +
-  'slip. Respond with ONLY the JSON object, no other text.'
+  'You are a precise, fair exam grader across all subjects (maths, sciences, ' +
+  'humanities, languages). Decide whether the student answer is correct for the ' +
+  'given question, judged against the expected answer / mark scheme. For maths, ' +
+  'accept any mathematically equivalent form (fractions, decimals, factored vs ' +
+  'expanded, with/without units). For written subjects, give credit when the ' +
+  'answer conveys the required ideas even if worded differently or with minor ' +
+  'spelling slips, and award partial credit for partially correct answers. ' +
+  'Respond with ONLY the JSON object, no other text.'
 
 // Defensive JSON parse: strips markdown fences / stray prose around the object.
 export function parseGraderJSON(text) {
@@ -127,9 +130,13 @@ export function parseGraderJSON(text) {
 // Grade a single free-text answer. Always returns a result object; never
 // throws. `local` is the Layer-1 result used as the fallback.
 async function gradeTextWithAI(question, studentAnswer, local, signal) {
+  const subject = question.subject ? `Subject: ${question.subject}\n` : ''
+  const scheme = question.markScheme ? `Mark scheme: ${question.markScheme}\n` : ''
   const user =
+    subject +
     `Question: ${question.prompt}\n` +
-    `Correct answer: ${question.correctAnswer}\n` +
+    `Expected answer: ${question.correctAnswer}\n` +
+    scheme +
     `Student's answer: ${studentAnswer}\n\n` +
     'Return ONLY this JSON: ' +
     '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
