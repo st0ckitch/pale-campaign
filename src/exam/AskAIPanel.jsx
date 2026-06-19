@@ -111,7 +111,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
           position: 'fixed',
           inset: 0,
           zIndex: 70,
-          background: 'rgba(5,6,8,0.55)',
+          background: 'var(--scrim)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
           animation: reduceMotion ? 'none' : 'qgfade .2s ease both',
@@ -128,10 +128,10 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
           width: 'min(440px, 94vw)',
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(16,19,23,0.92)',
+          background: 'var(--panel-bg)',
           backdropFilter: 'blur(40px)',
           WebkitBackdropFilter: 'blur(40px)',
-          borderLeft: '1px solid rgba(255,255,255,0.12)',
+          borderLeft: '1px solid rgba(var(--fill-rgb),0.12)',
           boxShadow: '-30px 0 90px rgba(0,0,0,0.6)',
           animation: reduceMotion ? 'none' : `qgslide .32s ${t.EASE} both`,
         }}
@@ -140,7 +140,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
         <div
           style={{
             padding: '18px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid rgba(var(--fill-rgb),0.08)',
             display: 'flex',
             alignItems: 'center',
             gap: 11,
@@ -176,8 +176,8 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
               width: 32,
               height: 32,
               borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(var(--fill-rgb),0.12)',
+              background: 'rgba(var(--fill-rgb),0.05)',
               color: t.INK,
               cursor: 'pointer',
               display: 'flex',
@@ -197,13 +197,13 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
             style={{
               padding: '12px 14px',
               borderRadius: 14,
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(var(--fill-rgb),0.04)',
+              border: '1px solid rgba(var(--fill-rgb),0.08)',
               fontSize: 13.5,
               lineHeight: 1.5,
             }}
           >
-            <span style={{ fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.4)' }}>
+            <span style={{ fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)' }}>
               {question.topic}
             </span>
             <div style={{ marginTop: 6 }}>{question.prompt}</div>
@@ -232,9 +232,9 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
                       maxWidth: '88%',
                       padding: '11px 14px',
                       borderRadius: '16px 16px 16px 4px',
-                      background: 'rgba(255,255,255,0.06)',
+                      background: 'rgba(var(--fill-rgb),0.06)',
                       border: `1px solid ${t.hexA(t.accent, 0.22)}`,
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14)',
+                      boxShadow: 'inset 0 1px 0 rgba(var(--fill-rgb),0.14)',
                       fontSize: 14,
                       lineHeight: 1.55,
                     }
@@ -259,7 +259,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
         </div>
 
         {/* composer */}
-        <div style={{ padding: '12px 16px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ padding: '12px 16px 16px', borderTop: '1px solid rgba(var(--fill-rgb),0.08)' }}>
           <div style={{ display: 'flex', gap: 7, marginBottom: 10, flexWrap: 'wrap' }}>
             {QUICK_CHIPS.map((c) => (
               <button
@@ -273,9 +273,9 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
                   fontWeight: 600,
                   cursor: busy ? 'default' : 'pointer',
                   fontFamily: "'Manrope',sans-serif",
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: 'rgba(244,246,248,0.7)',
+                  background: 'rgba(var(--fill-rgb),0.05)',
+                  border: '1px solid rgba(var(--fill-rgb),0.12)',
+                  color: 'rgba(var(--text-rgb),0.7)',
                   opacity: busy ? 0.5 : 1,
                 }}
               >
@@ -290,8 +290,8 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
               alignItems: 'center',
               padding: '7px 7px 7px 15px',
               borderRadius: 15,
-              background: 'rgba(12,14,17,0.6)',
-              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'var(--input-bg)',
+              border: '1px solid rgba(var(--fill-rgb),0.10)',
             }}
           >
             <input

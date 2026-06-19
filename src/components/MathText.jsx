@@ -13,6 +13,11 @@ export default function MathText({ latex, fallback, display = false, style }) {
 
     const tryRender = () => {
       if (cancelled || !ref.current) return
+      // No LaTeX (e.g. a teacher-authored plain-text prompt): just show the text.
+      if (!latex) {
+        ref.current.textContent = fallback ?? ''
+        return
+      }
       const katex = typeof window !== 'undefined' ? window.katex : null
       if (katex) {
         try {

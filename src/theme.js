@@ -1,11 +1,17 @@
 // ---------------------------------------------------------------------------
-// Design tokens — lifted directly from the "Quiet Glass" reference so the exam
-// module matches the rest of the dashboard exactly.
+// Design tokens. The neutral palette (ink, fills, glass, canvas) is driven by
+// CSS variables defined in index.html, so a single `data-mode` switch flips the
+// whole UI between dark and light. The brand accent (BIST yellow / BGA blue) is
+// independent of mode.
 // ---------------------------------------------------------------------------
 
-export const INK = '#F4F6F8'
-export const OK = '#7DE3B0' // success green
-export const CORAL = '#FF8A8A' // error / flagged
+export const INK = 'var(--ink)'
+export const OK = '#34C796' // success green (readable on light + dark)
+export const CORAL = '#F2607B' // error / flagged
+
+// muted text + subtle fill helpers, both mode-aware via CSS variables
+export const sub = (a) => `rgba(var(--text-rgb), ${a})`
+export const fill = (a) => `rgba(var(--fill-rgb), ${a})`
 
 // hex + alpha -> rgba()
 export function hexA(h, a) {
@@ -15,13 +21,13 @@ export function hexA(h, a) {
 
 export const EASE = 'cubic-bezier(.22,1,.36,1)'
 
-// The frosted glass surface used by every card in the reference.
+// The frosted glass surface used by every card.
 export const GLASS = {
-  background: 'rgba(255,255,255,0.055)',
+  background: 'var(--glass-bg)',
   backdropFilter: 'blur(40px)',
   WebkitBackdropFilter: 'blur(40px)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.16)',
+  border: '1px solid var(--glass-border)',
+  boxShadow: 'var(--glass-shadow)',
 }
 
 export function getTheme(brand) {
@@ -40,6 +46,8 @@ export function getTheme(brand) {
     GLASS,
     EASE,
     hexA,
+    sub,
+    fill,
 
     // brand mark on the left rail
     brandMark: {
@@ -98,7 +106,7 @@ export function getTheme(brand) {
       inset: 0,
       pointerEvents: 'none',
       animation: 'qgbloom 22s ease-in-out infinite',
-      background: `radial-gradient(46% 38% at 50% -4%, rgba(255,255,255,${0.13 * glow}) 0%, transparent 62%), radial-gradient(40% 34% at 72% 2%, ${hexA(accent, 0.09 * glow)} 0%, transparent 58%)`,
+      background: `radial-gradient(46% 38% at 50% -4%, rgba(var(--fill-rgb), ${0.1 * glow}) 0%, transparent 62%), radial-gradient(40% 34% at 72% 2%, ${hexA(accent, 0.11 * glow)} 0%, transparent 58%)`,
     },
   }
 }
@@ -113,9 +121,9 @@ export function pill(t, on) {
     cursor: 'pointer',
     transition: `all .2s ${t.EASE}`,
     fontFamily: "'Manrope',sans-serif",
-    border: `1px solid ${on ? t.hexA(t.accent, 0.5) : 'rgba(255,255,255,0.12)'}`,
-    background: on ? t.hexA(t.accent, 0.16) : 'rgba(255,255,255,0.04)',
-    color: on ? INK : 'rgba(244,246,248,0.62)',
+    border: `1px solid ${on ? t.hexA(t.accent, 0.5) : fill(0.12)}`,
+    background: on ? t.hexA(t.accent, 0.16) : fill(0.04),
+    color: on ? INK : sub(0.62),
     boxShadow: on ? `0 0 18px ${t.hexA(t.accent, 0.22 * t.glow)}` : 'none',
   }
 }
@@ -134,7 +142,7 @@ export function navStyle(t, on) {
     transition: `all .25s ${t.EASE}`,
     border: `1px solid ${on ? t.hexA(t.accent, 0.4) : 'transparent'}`,
     background: on ? t.hexA(t.accent, 0.13) : 'transparent',
-    color: on ? t.accent : 'rgba(244,246,248,0.45)',
+    color: on ? t.accent : sub(0.45),
     boxShadow: on ? `0 0 22px ${t.hexA(t.accent, 0.26 * t.glow)}` : 'none',
   }
 }

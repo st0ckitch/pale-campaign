@@ -10,15 +10,38 @@ export class AIUnavailableError extends Error {
   }
 }
 
+// A "bring your own key" path for static hosting (e.g. GitHub Pages) where no
+// server proxy exists. The key lives in memory only — never persisted, never
+// committed. When set, calls go straight to Anthropic from the browser using
+// the documented direct-browser-access header. When empty, calls use the dev
+// proxy (which injects a server-side key).
+const ANTHROPIC_DIRECT = 'https://api.anthropic.com/v1/messages'
+let CLIENT_KEY = ''
+export function setClientApiKey(key) {
+  CLIENT_KEY = (key || '').trim()
+}
+export function hasClientKey() {
+  return !!CLIENT_KEY
+}
+
 // Low-level call. Returns the concatenated text of the first content block(s).
 // `messages` is the Anthropic messages array; `system` is an optional system
 // prompt string.
 export async function callAnthropic({ system, messages, maxTokens = 1000, model = MODEL, signal }) {
+  const direct = !!CLIENT_KEY
+  const url = direct ? ANTHROPIC_DIRECT : ANTHROPIC_ENDPOINT
+  const headers = { 'Content-Type': 'application/json' }
+  if (direct) {
+    headers['x-api-key'] = CLIENT_KEY
+    headers['anthropic-version'] = '2023-06-01'
+    headers['anthropic-dangerous-direct-browser-access'] = 'true'
+  }
+
   let res
   try {
-    res = await fetch(ANTHROPIC_ENDPOINT, {
+    res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal,
       body: JSON.stringify({
         model,

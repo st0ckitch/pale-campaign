@@ -1,23 +1,46 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getTheme, pill, navStyle } from './theme.js'
+import { getTheme, pill, navStyle, sub, fill } from './theme.js'
+import { setClientApiKey } from './lib/anthropic.js'
 import { useReducedMotion } from './lib/useReducedMotion.js'
-import ExamModule from './exam/ExamModule.jsx'
+import ExamsView from './exam/ExamsView.jsx'
+import Home from './pages/Home.jsx'
+import Tutor from './pages/Tutor.jsx'
+import Mastery from './pages/Mastery.jsx'
+import Library from './pages/Library.jsx'
+import Teacher from './pages/Teacher.jsx'
+import ConnectAI from './components/ConnectAI.jsx'
+import { useContentStore } from './lib/useContentStore.js'
 
 const NAV = [
-  ['home', 'Home', (p) => <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.4V20h14V9.4" /></>],
+  ['home', 'Home', () => <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.4V20h14V9.4" /></>],
   ['practice', 'Practice', () => <path d="m12 3 2.2 5.2L20 9l-4 3.8L17 19l-5-2.8L7 19l1-6.2L4 9l5.8-.8z" />],
   ['exams', 'Exams', () => <><rect x="5" y="3.5" width="14" height="17" rx="2.5" /><path d="M9 3.5h6V6H9z" /><path d="m8.5 13 2 2 4-4" /></>],
   ['mastery', 'Mastery', () => <><circle cx="12" cy="12" r="8.2" /><circle cx="12" cy="12" r="3.2" /></>],
   ['tutor', 'AI Tutor', () => <><path d="M4 5.5h16v10H9.5L5 19.5z" /><path d="M8.5 10h7M8.5 13h4" /></>],
   ['library', 'Library', () => <><rect x="5" y="3.5" width="14" height="17" rx="2.5" /><path d="M9 3.5v17" /></>],
+  ['teacher', 'Teacher', () => <><path d="M12 4 2 9l10 5 10-5z" /><path d="M6 11v4c0 1 2.7 3 6 3s6-2 6-3v-4" /></>],
 ]
 
 export default function App() {
   const [brand, setBrand] = useState('BIST')
-  const [tab, setTab] = useState('exams') // open on the Exams module (the deliverable)
+  const [mode, setMode] = useState('dark')
+  const [tab, setTab] = useState('home')
   const [toasts, setToasts] = useState([])
+  const [apiKey, setApiKey] = useState('')
+  const [connectOpen, setConnectOpen] = useState(false)
   const reduceMotion = useReducedMotion()
+  const store = useContentStore()
   const t = getTheme(brand)
+
+  // flip the whole neutral palette between dark/light
+  useEffect(() => {
+    document.documentElement.dataset.mode = mode
+  }, [mode])
+
+  // register the in-browser API key for direct calls (used on static hosting)
+  useEffect(() => {
+    setClientApiKey(apiKey)
+  }, [apiKey])
 
   const toast = useCallback((msg) => {
     const id = Math.random().toString(36).slice(2)
@@ -25,8 +48,11 @@ export default function App() {
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 3400)
   }, [])
 
+  const aiOn = !!apiKey
+  const go = (key) => setTab(key)
+
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: 'linear-gradient(180deg,#0B0D10 0%,#121519 100%)' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: 'var(--canvas)' }}>
       <div style={t.bloom} />
       {/* fine noise overlay */}
       <div
@@ -53,11 +79,11 @@ export default function App() {
             padding: '16px 0',
             gap: 18,
             borderRadius: 26,
-            background: 'rgba(255,255,255,0.045)',
+            background: 'var(--rail-bg)',
             backdropFilter: 'blur(40px)',
             WebkitBackdropFilter: 'blur(40px)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.16)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: 'var(--glass-shadow)',
             position: 'sticky',
             top: 18,
             height: 'calc(100vh - 36px)',
@@ -66,7 +92,7 @@ export default function App() {
           <div style={t.brandMark} onClick={() => setBrand((b) => (b === 'BIST' ? 'BGA' : 'BIST'))} title="Switch school">
             {brand}
           </div>
-          <div style={{ width: 26, height: 1, background: 'rgba(255,255,255,0.10)' }} />
+          <div style={{ width: 26, height: 1, background: 'var(--glass-border)' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
             {NAV.map(([key, label, icon]) => {
               const on = tab === key
@@ -83,7 +109,7 @@ export default function App() {
             })}
           </div>
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
-            <div style={{ width: 38, height: 38, borderRadius: 13, background: 'linear-gradient(135deg,#3a3f47,#23272d)', border: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 13, background: 'linear-gradient(135deg,#3a3f47,#23272d)', border: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: '#F4F6F8' }}>
               NM
             </div>
           </div>
@@ -97,20 +123,71 @@ export default function App() {
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>
                 Welcome back, Nino 👋
               </div>
-              <div style={{ fontSize: 12.5, color: 'rgba(244,246,248,0.4)', marginTop: 3, letterSpacing: '0.02em' }}>
+              <div style={{ fontSize: 12.5, color: sub(0.45), marginTop: 3, letterSpacing: '0.02em' }}>
                 {brand} · Sixth Form · British curriculum
               </div>
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 999, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}>
+              {/* Connect AI */}
+              <button
+                onClick={() => setConnectOpen(true)}
+                title={aiOn ? 'AI connected' : 'Connect AI'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 14px',
+                  borderRadius: 999,
+                  cursor: 'pointer',
+                  fontFamily: "'Manrope',sans-serif",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: aiOn ? t.OK : sub(0.7),
+                  background: aiOn ? 'rgba(52,199,150,0.12)' : fill(0.05),
+                  border: `1px solid ${aiOn ? 'rgba(52,199,150,0.45)' : fill(0.12)}`,
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: aiOn ? t.OK : sub(0.4), boxShadow: aiOn ? `0 0 8px ${t.OK}` : 'none' }} />
+                {aiOn ? 'AI connected' : 'Connect AI'}
+              </button>
+
+              {/* Dark / light toggle */}
+              <button
+                onClick={() => setMode((m) => (m === 'dark' ? 'light' : 'dark'))}
+                title={mode === 'dark' ? 'Switch to light' : 'Switch to dark'}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: sub(0.7),
+                  background: fill(0.05),
+                  border: `1px solid ${fill(0.12)}`,
+                }}
+              >
+                {mode === 'dark' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4.2" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" />
+                  </svg>
+                )}
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 999, background: fill(0.05), border: `1px solid ${fill(0.1)}` }}>
                 <span style={{ fontSize: 14 }}>🔥</span>
                 <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 14 }}>12</span>
-                <span style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.45)' }}>day streak</span>
-                <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.12)' }} />
+                <span style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: sub(0.45) }}>day streak</span>
+                <span style={{ width: 1, height: 14, background: fill(0.12) }} />
                 <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 13, color: t.accent }}>2,480 XP</span>
               </div>
-              <div style={{ display: 'flex', padding: 4, gap: 3, borderRadius: 999, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}>
+              <div style={{ display: 'flex', padding: 4, gap: 3, borderRadius: 999, background: fill(0.05), border: `1px solid ${fill(0.1)}` }}>
                 <div style={pill(t, brand === 'BGA')} onClick={() => setBrand('BGA')}>BGA</div>
                 <div style={pill(t, brand === 'BIST')} onClick={() => setBrand('BIST')}>BIST</div>
               </div>
@@ -118,10 +195,19 @@ export default function App() {
           </header>
 
           {/* CONTENT */}
-          {tab === 'exams' && <ExamModule theme={t} toast={toast} />}
-          {tab !== 'exams' && <Placeholder t={t} tab={tab} onGoExams={() => setTab('exams')} reduceMotion={reduceMotion} />}
+          {tab === 'home' && <Home t={t} reduceMotion={reduceMotion} onGo={go} toast={toast} store={store} />}
+          {tab === 'exams' && <ExamsView t={t} store={store} toast={toast} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={() => setConnectOpen(true)} onGo={go} />}
+          {tab === 'tutor' && <Tutor t={t} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={() => setConnectOpen(true)} toast={toast} />}
+          {tab === 'mastery' && <Mastery t={t} reduceMotion={reduceMotion} onGo={go} />}
+          {tab === 'library' && <Library t={t} reduceMotion={reduceMotion} onGo={go} toast={toast} />}
+          {tab === 'teacher' && <Teacher t={t} store={store} toast={toast} reduceMotion={reduceMotion} onGo={go} />}
+          {tab === 'practice' && <PracticeStub t={t} reduceMotion={reduceMotion} onGo={go} />}
         </main>
       </div>
+
+      {connectOpen && (
+        <ConnectAI t={t} apiKey={apiKey} onSave={(k) => { setApiKey(k); toast(k ? 'AI connected' : 'AI disconnected'); }} onClose={() => setConnectOpen(false)} />
+      )}
 
       {/* TOASTS */}
       <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 90, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
@@ -134,16 +220,17 @@ export default function App() {
               gap: 11,
               padding: '13px 18px',
               borderRadius: 16,
-              background: 'rgba(18,21,25,0.9)',
+              background: 'var(--toast-bg)',
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
+              border: '1px solid var(--glass-border)',
+              boxShadow: '0 16px 44px rgba(0,0,0,0.3)',
               fontSize: 13.5,
               fontWeight: 500,
+              color: 'var(--ink)',
               animation: 'qgfade .3s cubic-bezier(.22,1,.36,1) both',
             }}
           >
-            <span style={{ width: 22, height: 22, borderRadius: 999, background: 'rgba(125,227,176,0.18)', border: '1px solid rgba(125,227,176,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7DE3B0', fontSize: 12 }}>✓</span>
+            <span style={{ width: 22, height: 22, borderRadius: 999, background: 'rgba(52,199,150,0.18)', border: '1px solid rgba(52,199,150,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34C796', fontSize: 12 }}>✓</span>
             {to.msg}
           </div>
         ))}
@@ -152,31 +239,18 @@ export default function App() {
   )
 }
 
-// Other tabs are out of scope for this module; we keep them on-brand and point
-// the user to the live exam simulator.
-function Placeholder({ t, tab, onGoExams, reduceMotion }) {
-  const copy = {
-    home: ['Your learning hub', 'Track streaks, mastery and upcoming assessments. The live module in this build is the AI-graded Math Exam Simulator.'],
-    practice: ['Practice generator', 'Generate fresh exercise sets by topic and difficulty. Wired up next — for now, jump into a full mock exam.'],
-    mastery: ['Knowledge map', 'A per-topic view of strengths and focus areas. Your exam results feed straight into this.'],
-    tutor: ['AI Tutor', 'A full conversational tutor. Inside the exam, a question-scoped tutor is already live under "Ask AI".'],
-    library: ['Your library', 'Saved notes, worked solutions and revision packs will collect here as you study.'],
-  }
-  const [title, body] = copy[tab] || copy.home
+// Practice tab kept as a tasteful stub that routes into the live exam.
+function PracticeStub({ t, reduceMotion, onGo }) {
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: 54, textAlign: 'center', animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
       <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 18, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10' }}>
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="5" y="3.5" width="14" height="17" rx="2.5" /><path d="m8.5 13 2 2 4-4" />
-        </svg>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 2.2 5.2L20 9l-4 3.8L17 19l-5-2.8L7 19l1-6.2L4 9l5.8-.8z" /></svg>
       </div>
-      <div style={{ fontSize: 19, fontWeight: 700 }}>{title}</div>
-      <div style={{ fontSize: 14, color: 'rgba(244,246,248,0.55)', marginTop: 8, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-        {body}
+      <div style={{ fontSize: 19, fontWeight: 700 }}>Practice generator</div>
+      <div style={{ fontSize: 14, color: t.sub(0.55), marginTop: 8, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+        Build fresh exercise sets by topic and difficulty. For now, jump into a full AI-graded mock exam.
       </div>
-      <button style={{ ...t.cta, marginTop: 24 }} onClick={onGoExams}>
-        Open the exam simulator →
-      </button>
+      <button style={{ ...t.cta, marginTop: 24 }} onClick={() => onGo('exams')}>Open the exam simulator →</button>
     </div>
   )
 }

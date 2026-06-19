@@ -21,12 +21,45 @@
     <style>
       * { box-sizing: border-box; }
       html, body, #root { height: 100%; }
+
+      /* Neutral palette driven by CSS variables so dark/light is one switch.
+         The brand accent (BIST yellow / BGA blue) is unaffected. */
+      :root, [data-mode='dark'] {
+        --canvas: linear-gradient(180deg, #0B0D10 0%, #121519 100%);
+        --ink: #F4F6F8;
+        --text-rgb: 244, 246, 248;   /* muted text base */
+        --fill-rgb: 255, 255, 255;   /* subtle fills / hairlines */
+        --glass-bg: rgba(255, 255, 255, 0.055);
+        --glass-border: rgba(255, 255, 255, 0.10);
+        --glass-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+        --rail-bg: rgba(255, 255, 255, 0.045);
+        --input-bg: rgba(12, 14, 17, 0.5);
+        --toast-bg: rgba(18, 21, 25, 0.9);
+        --panel-bg: rgba(16, 19, 23, 0.92);
+        --scrim: rgba(5, 6, 8, 0.55);
+      }
+      [data-mode='light'] {
+        --canvas: linear-gradient(180deg, #EEF1F6 0%, #DEE4EC 100%);
+        --ink: #1B2330;
+        --text-rgb: 27, 35, 48;
+        --fill-rgb: 27, 35, 48;
+        --glass-bg: rgba(255, 255, 255, 0.72);
+        --glass-border: rgba(27, 35, 48, 0.10);
+        --glass-shadow: 0 20px 50px rgba(27, 35, 48, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        --rail-bg: rgba(255, 255, 255, 0.66);
+        --input-bg: rgba(255, 255, 255, 0.8);
+        --toast-bg: rgba(255, 255, 255, 0.94);
+        --panel-bg: rgba(248, 250, 252, 0.92);
+        --scrim: rgba(27, 35, 48, 0.28);
+      }
+
       body {
         margin: 0;
-        background: #0b0d10;
+        background: var(--canvas);
         font-family: 'Manrope', sans-serif;
-        color: #f4f6f8;
+        color: var(--ink);
         -webkit-font-smoothing: antialiased;
+        transition: background 0.4s ease, color 0.4s ease;
       }
       ::-webkit-scrollbar { width: 9px; height: 9px; }
       ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }

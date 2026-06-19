@@ -5,8 +5,6 @@ import { useReducedMotion } from '../lib/useReducedMotion.js'
 import MathText from '../components/MathText.jsx'
 import AskAIPanel from './AskAIPanel.jsx'
 
-const TOTAL = EXAM_QUESTIONS.length
-
 // count-up animation for the score ring / number
 function useCountUp(target, run, reduceMotion, dur = 900) {
   const [v, setV] = useState(run && !reduceMotion ? 0 : target)
@@ -37,21 +35,22 @@ function fmtTime(s) {
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
-export default function ExamModule({ theme: t, toast }) {
+export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META }) {
   const reduceMotion = useReducedMotion()
+  const total = questions.length
 
   const [phase, setPhase] = useState('intro') // intro | active | grading | review
   const [answers, setAnswers] = useState({})
   const [flagged, setFlagged] = useState({})
   const [current, setCurrent] = useState(0)
-  const [secondsLeft, setSecondsLeft] = useState(EXAM_META.durationSeconds)
+  const [secondsLeft, setSecondsLeft] = useState(meta.durationSeconds)
   const [results, setResults] = useState(null)
   const [askFor, setAskFor] = useState(null) // question being discussed
   const abortRef = useRef(null)
 
   const answeredCount = useMemo(
-    () => EXAM_QUESTIONS.filter((q) => (answers[q.id] ?? '').toString().trim() !== '').length,
-    [answers],
+    () => questions.filter((q) => (answers[q.id] ?? '').toString().trim() !== '').length,
+    [answers, questions],
   )
 
   // ---- timer ----
@@ -92,7 +91,7 @@ export default function ExamModule({ theme: t, toast }) {
     abortRef.current = controller
     try {
       const [res] = await Promise.all([
-        Promise.all(EXAM_QUESTIONS.map((q) => gradeQuestion(q, answers[q.id], controller.signal))),
+        Promise.all(questions.map((q) => gradeQuestion(q, answers[q.id], controller.signal))),
         delay(1300), // keep the shimmer state visible even if grading is instant
       ])
       setResults(res)
@@ -108,21 +107,23 @@ export default function ExamModule({ theme: t, toast }) {
     setFlagged({})
     setResults(null)
     setCurrent(0)
-    setSecondsLeft(EXAM_META.durationSeconds)
+    setSecondsLeft(meta.durationSeconds)
     setPhase('active')
   }
 
   const lowTime = secondsLeft < 120
-  const q = EXAM_QUESTIONS[current]
+  const q = questions[current]
 
   return (
     <div style={{ animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
-      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} />}
+      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} meta={meta} />}
 
       {phase === 'active' && (
         <ActiveExam
           t={t}
           q={q}
+          questions={questions}
+          total={total}
           current={current}
           setCurrent={setCurrent}
           answers={answers}
@@ -144,6 +145,9 @@ export default function ExamModule({ theme: t, toast }) {
           t={t}
           results={results}
           answers={answers}
+          questions={questions}
+          total={total}
+          meta={meta}
           reduceMotion={reduceMotion}
           onRestart={restart}
           onAsk={(question) => setAskFor(question)}
@@ -168,24 +172,24 @@ export default function ExamModule({ theme: t, toast }) {
 // ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
-function Intro({ t, onStart, reduceMotion }) {
+function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, meta }) {
+  const mins = Math.floor(meta.durationSeconds / 60)
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(244,246,248,0.4)' }}>
-        Exam simulator
+      <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
+        Exam simulator{meta.subject ? ` · ${meta.subject}` : ''}
       </div>
       <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, letterSpacing: '-0.03em', fontSize: 'clamp(30px,4vw,46px)', margin: '12px 0 0' }}>
-        {EXAM_META.title}
+        {meta.title}
       </h1>
-      <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.6, color: 'rgba(244,246,248,0.62)', maxWidth: 520 }}>
-        {TOTAL} mixed questions — multiple choice and written answers — across algebra, geometry, fractions,
-        percentages and equations. You have {Math.floor(EXAM_META.durationSeconds / 60)} minutes. Stuck? Ask the AI
+      <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.62)', maxWidth: 520 }}>
+        {total} mixed questions — multiple choice and written answers. You have {mins} minutes. Stuck? Ask the AI
         tutor for a hint on any question — it'll guide your method but won't hand you the answer until you submit.
       </p>
       <div style={{ display: 'flex', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
         {[
-          ['10', 'Questions'],
-          ['20:00', 'Time limit'],
+          [String(total), 'Questions'],
+          [`${mins}:00`, 'Time limit'],
           ['AI', 'Graded'],
         ].map(([v, l]) => (
           <div
@@ -193,21 +197,31 @@ function Intro({ t, onStart, reduceMotion }) {
             style={{
               padding: '14px 20px',
               borderRadius: 16,
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(var(--fill-rgb),0.04)',
+              border: '1px solid rgba(var(--fill-rgb),0.08)',
             }}
           >
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 22, color: t.accent }}>{v}</div>
-            <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.4)', marginTop: 4 }}>{l}</div>
+            <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', marginTop: 4 }}>{l}</div>
           </div>
         ))}
       </div>
-      <button style={{ ...t.cta, marginTop: 28 }} onClick={onStart}>
-        Start exam
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 12h13M13 6l6 6-6 6" />
-        </svg>
-      </button>
+      <div style={{ display: 'flex', gap: 14, marginTop: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button style={t.cta} onClick={onStart}>
+          Start exam
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h13M13 6l6 6-6 6" />
+          </svg>
+        </button>
+        {!aiOn && (
+          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.55)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: 'rgba(var(--text-rgb),0.4)' }} />
+            MCQ + written answers grade offline.
+            <button onClick={onConnect} style={{ background: 'none', border: 'none', color: t.accent, cursor: 'pointer', fontWeight: 700, fontFamily: "'Manrope',sans-serif", fontSize: 12.5, padding: 0 }}>Connect AI</button>
+            for semantic grading & the tutor.
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -216,16 +230,16 @@ function Intro({ t, onStart, reduceMotion }) {
 // Active exam
 // ---------------------------------------------------------------------------
 function ActiveExam({
-  t, q, current, setCurrent, answers, setAnswer, flagged, toggleFlag,
+  t, q, questions, total, current, setCurrent, answers, setAnswer, flagged, toggleFlag,
   answeredCount, secondsLeft, lowTime, onSubmit, onAsk,
 }) {
-  const progress = (answeredCount / TOTAL) * 100
+  const progress = (answeredCount / total) * 100
   const timerColor = lowTime ? t.CORAL : t.accent
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* progress bar */}
-      <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+      <div style={{ height: 7, borderRadius: 999, background: 'rgba(var(--fill-rgb),0.07)', overflow: 'hidden' }}>
         <div
           style={{
             width: `${progress}%`,
@@ -243,8 +257,8 @@ function ActiveExam({
         <div style={{ ...t.GLASS, borderRadius: 24, padding: '26px 30px', display: 'flex', flexDirection: 'column', minHeight: 440 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
-              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(244,246,248,0.4)' }}>
-                Question {current + 1} of {TOTAL}
+              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
+                Question {current + 1} of {total}
               </div>
               <div
                 style={{
@@ -271,7 +285,7 @@ function ActiveExam({
                 gap: 8,
                 padding: '9px 16px',
                 borderRadius: 999,
-                background: lowTime ? t.hexA(t.CORAL, 0.12) : 'rgba(255,255,255,0.05)',
+                background: lowTime ? t.hexA(t.CORAL, 0.12) : 'rgba(var(--fill-rgb),0.05)',
                 border: `1px solid ${lowTime ? t.hexA(t.CORAL, 0.6) : t.hexA(t.accent, 0.5)}`,
                 color: timerColor,
                 fontFamily: "'Space Grotesk',sans-serif",
@@ -290,7 +304,7 @@ function ActiveExam({
           <div style={{ marginTop: 24, fontSize: 19, fontWeight: 600, lineHeight: 1.5 }}>
             <MathText latex={q.latex} fallback={q.prompt} display />
           </div>
-          <div style={{ marginTop: 8, fontSize: 13.5, color: 'rgba(244,246,248,0.55)' }}>{q.prompt}</div>
+          <div style={{ marginTop: 8, fontSize: 13.5, color: 'rgba(var(--text-rgb),0.55)' }}>{q.prompt}</div>
 
           {/* answer area */}
           {q.type === 'mcq' ? (
@@ -312,12 +326,12 @@ function ActiveExam({
                       fontSize: 14.5,
                       fontFamily: "'Manrope',sans-serif",
                       transition: `all .18s ${t.EASE}`,
-                      background: sel ? t.hexA(t.accent, 0.14) : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${sel ? t.hexA(t.accent, 0.55) : 'rgba(255,255,255,0.10)'}`,
+                      background: sel ? t.hexA(t.accent, 0.14) : 'rgba(var(--fill-rgb),0.04)',
+                      border: `1px solid ${sel ? t.hexA(t.accent, 0.55) : 'rgba(var(--fill-rgb),0.10)'}`,
                       color: t.INK,
                     }}
                   >
-                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, color: sel ? t.accent : 'rgba(244,246,248,0.5)' }}>
+                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, color: sel ? t.accent : 'rgba(var(--text-rgb),0.5)' }}>
                       {String.fromCharCode(65 + i)}
                     </span>
                     {opt}
@@ -335,15 +349,15 @@ function ActiveExam({
                   width: '100%',
                   padding: '15px 18px',
                   borderRadius: 14,
-                  background: 'rgba(12,14,17,0.5)',
-                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: 'var(--input-bg)',
+                  border: '1px solid rgba(var(--fill-rgb),0.10)',
                   color: t.INK,
                   fontSize: 16,
                   fontFamily: "'Space Grotesk',sans-serif",
                   outline: 'none',
                 }}
               />
-              <div style={{ fontSize: 12, color: 'rgba(244,246,248,0.4)', marginTop: 9 }}>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.4)', marginTop: 9 }}>
                 Equivalent forms are accepted — fractions, decimals, with or without units.
               </div>
             </div>
@@ -359,9 +373,9 @@ function ActiveExam({
               ‹ Prev
             </button>
             <button
-              onClick={() => setCurrent((c) => Math.min(TOTAL - 1, c + 1))}
-              disabled={current === TOTAL - 1}
-              style={navBtn(t, current === TOTAL - 1)}
+              onClick={() => setCurrent((c) => Math.min(total - 1, c + 1))}
+              disabled={current === total - 1}
+              style={navBtn(t, current === total - 1)}
             >
               Next ›
             </button>
@@ -381,15 +395,15 @@ function ActiveExam({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ ...t.GLASS, borderRadius: 24, padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(244,246,248,0.4)' }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
                 Question navigator
               </span>
-              <span style={{ fontSize: 12, color: 'rgba(244,246,248,0.5)', fontFamily: "'Space Grotesk',sans-serif" }}>
-                {answeredCount}/{TOTAL}
+              <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', fontFamily: "'Space Grotesk',sans-serif" }}>
+                {answeredCount}/{total}
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 9 }}>
-              {EXAM_QUESTIONS.map((qq, i) => {
+              {questions.map((qq, i) => {
                 const isAnswered = (answers[qq.id] ?? '').toString().trim() !== ''
                 const isFlag = flagged[qq.id]
                 const isCur = i === current
@@ -410,10 +424,10 @@ function ActiveExam({
                       cursor: 'pointer',
                       transition: `all .18s ${t.EASE}`,
                       border: `1px solid ${
-                        isCur ? t.hexA(t.accent, 0.7) : isFlag ? t.hexA(t.CORAL, 0.4) : isAnswered ? t.hexA(t.accent, 0.3) : 'rgba(255,255,255,0.08)'
+                        isCur ? t.hexA(t.accent, 0.7) : isFlag ? t.hexA(t.CORAL, 0.4) : isAnswered ? t.hexA(t.accent, 0.3) : 'rgba(var(--fill-rgb),0.08)'
                       }`,
-                      background: isCur ? t.hexA(t.accent, 0.2) : isAnswered ? t.hexA(t.accent, 0.1) : 'rgba(255,255,255,0.03)',
-                      color: isAnswered || isCur || isFlag ? t.INK : 'rgba(244,246,248,0.45)',
+                      background: isCur ? t.hexA(t.accent, 0.2) : isAnswered ? t.hexA(t.accent, 0.1) : 'rgba(var(--fill-rgb),0.03)',
+                      color: isAnswered || isCur || isFlag ? t.INK : 'rgba(var(--text-rgb),0.45)',
                     }}
                   >
                     {i + 1}
@@ -427,7 +441,7 @@ function ActiveExam({
                         height: 6,
                         borderRadius: 999,
                         background: isFlag ? t.CORAL : isAnswered ? t.accent : 'transparent',
-                        border: isFlag || isAnswered ? 'none' : '1px solid rgba(255,255,255,0.3)',
+                        border: isFlag || isAnswered ? 'none' : '1px solid rgba(var(--fill-rgb),0.3)',
                         boxShadow: isFlag ? `0 0 7px ${t.CORAL}` : isAnswered ? `0 0 7px ${t.accent}` : 'none',
                       }}
                     />
@@ -435,23 +449,23 @@ function ActiveExam({
                 )
               })}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18, fontSize: 12, color: 'rgba(244,246,248,0.55)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18, fontSize: 12, color: 'rgba(var(--text-rgb),0.55)' }}>
               <Legend color={t.accent} label="Answered" />
               <Legend color={t.CORAL} label="Flagged for review" />
-              <Legend color="rgba(255,255,255,0.25)" label="Not answered" hollow />
+              <Legend color="rgba(var(--fill-rgb),0.25)" label="Not answered" hollow />
             </div>
           </div>
 
           <div style={{ ...t.GLASS, borderRadius: 24, padding: '20px 22px' }}>
-            <div style={{ fontSize: 12.5, color: 'rgba(244,246,248,0.55)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.55)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ width: 6, height: 6, borderRadius: 999, background: t.OK, boxShadow: `0 0 7px ${t.OK}` }} />
               Answers autosaved
             </div>
             <button style={{ ...t.cta, width: '100%', justifyContent: 'center' }} onClick={onSubmit}>
               Submit exam
             </button>
-            <div style={{ fontSize: 11.5, color: 'rgba(244,246,248,0.4)', textAlign: 'center', marginTop: 10 }}>
-              {answeredCount < TOTAL ? `${TOTAL - answeredCount} question(s) still blank` : 'All questions answered'}
+            <div style={{ fontSize: 11.5, color: 'rgba(var(--text-rgb),0.4)', textAlign: 'center', marginTop: 10 }}>
+              {answeredCount < total ? `${total - answeredCount} question(s) still blank` : 'All questions answered'}
             </div>
           </div>
         </div>
@@ -468,9 +482,9 @@ function navBtn(t, disabled) {
     fontWeight: 600,
     fontFamily: "'Manrope',sans-serif",
     cursor: disabled ? 'default' : 'pointer',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    color: disabled ? 'rgba(244,246,248,0.3)' : t.INK,
+    background: 'rgba(var(--fill-rgb),0.05)',
+    border: '1px solid rgba(var(--fill-rgb),0.12)',
+    color: disabled ? 'rgba(var(--text-rgb),0.3)' : t.INK,
     opacity: disabled ? 0.5 : 1,
   }
 }
@@ -497,10 +511,10 @@ function Legend({ color, label, hollow }) {
 // ---------------------------------------------------------------------------
 function GradingSkeleton({ t, reduceMotion }) {
   const shimmer = {
-    background: 'linear-gradient(100deg,rgba(255,255,255,0.04) 30%,rgba(255,255,255,0.10) 50%,rgba(255,255,255,0.04) 70%)',
+    background: 'linear-gradient(100deg,rgba(var(--fill-rgb),0.04) 30%,rgba(var(--fill-rgb),0.10) 50%,rgba(var(--fill-rgb),0.04) 70%)',
     backgroundSize: '220% 100%',
     animation: reduceMotion ? 'none' : 'qgshim 1.3s linear infinite',
-    border: '1px solid rgba(255,255,255,0.07)',
+    border: '1px solid rgba(var(--fill-rgb),0.07)',
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -509,7 +523,7 @@ function GradingSkeleton({ t, reduceMotion }) {
           AI
         </div>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Grading your exam…</div>
-        <div style={{ fontSize: 13, color: 'rgba(244,246,248,0.5)' }}>Checking written answers for mathematically equivalent forms</div>
+        <div style={{ fontSize: 13, color: 'rgba(var(--text-rgb),0.5)' }}>Checking written answers for mathematically equivalent forms</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 20 }}>
         <div style={{ ...shimmer, height: 260, borderRadius: 24 }} />
@@ -530,10 +544,10 @@ function GradingSkeleton({ t, reduceMotion }) {
 // ---------------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------------
-function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast }) {
+function Results({ t, results, answers, questions, total, meta, reduceMotion, onRestart, onAsk, toast }) {
   const correctCount = results.filter((r) => r.correct).length
   const scaled = useCountUp(correctCount, true, reduceMotion, 900)
-  const pct = correctCount / TOTAL
+  const pct = correctCount / total
 
   // ring
   const R = 52
@@ -543,7 +557,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
   // per-topic breakdown (by score)
   const topics = useMemo(() => {
     const map = {}
-    EXAM_QUESTIONS.forEach((q, i) => {
+    questions.forEach((q, i) => {
       const r = results[i]
       if (!map[q.topic]) map[q.topic] = { sum: 0, n: 0 }
       map[q.topic].sum += r.score
@@ -552,7 +566,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
     return Object.entries(map)
       .map(([topic, { sum, n }]) => ({ topic, pct: Math.round((sum / n) * 100) }))
       .sort((a, b) => b.pct - a.pct)
-  }, [results])
+  }, [results, questions])
 
   const weakTopics = topics.filter((x) => x.pct < 70).map((x) => x.topic)
 
@@ -563,7 +577,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
         <div style={{ ...t.GLASS, borderRadius: 24, padding: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'relative', width: 160, height: 160 }}>
             <svg width="160" height="160" viewBox="0 0 160 160" style={{ transform: 'rotate(-90deg)' }}>
-              <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+              <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(var(--fill-rgb),0.08)" strokeWidth="10" />
               <circle
                 cx="80"
                 cy="80"
@@ -573,22 +587,22 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
                 strokeWidth="10"
                 strokeLinecap="round"
                 strokeDasharray={C}
-                strokeDashoffset={reduceMotion ? off : C * (1 - scaled / TOTAL)}
+                strokeDashoffset={reduceMotion ? off : C * (1 - scaled / total)}
                 style={{ transition: reduceMotion ? 'none' : `stroke-dashoffset .9s ${t.EASE}` }}
               />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 44, letterSpacing: '-0.03em' }}>
-                {Math.round(scaled)}<span style={{ fontSize: 24, color: 'rgba(244,246,248,0.45)' }}>/{TOTAL}</span>
+                {Math.round(scaled)}<span style={{ fontSize: 24, color: 'rgba(var(--text-rgb),0.45)' }}>/{total}</span>
               </div>
-              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.45)' }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)' }}>
                 {Math.round(pct * 100)}%
               </div>
             </div>
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>{verdict(pct)}</div>
-          <div style={{ fontSize: 12.5, color: 'rgba(244,246,248,0.5)', marginTop: 4, textAlign: 'center' }}>
-            {EXAM_META.title} · {EXAM_META.subtitle}
+          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 4, textAlign: 'center' }}>
+            {meta.title} · {meta.subtitle}
           </div>
           <button style={{ ...t.ghostBtn, marginTop: 18 }} onClick={onRestart}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -601,7 +615,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
         {/* topic breakdown + summary */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ ...t.GLASS, borderRadius: 24, padding: 24 }}>
-            <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(244,246,248,0.4)', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)', marginBottom: 16 }}>
               Per-topic breakdown
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
@@ -609,9 +623,9 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
                 <div key={b.topic}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span>{b.topic}</span>
-                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, color: 'rgba(244,246,248,0.7)' }}>{b.pct}%</span>
+                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, color: 'rgba(var(--text-rgb),0.7)' }}>{b.pct}%</span>
                   </div>
-                  <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                  <div style={{ height: 8, borderRadius: 999, background: 'rgba(var(--fill-rgb),0.07)', overflow: 'hidden' }}>
                     <div
                       style={{
                         width: `${b.pct}%`,
@@ -634,7 +648,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
               <div style={{ width: 28, height: 28, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10', fontWeight: 700, fontSize: 12 }}>AI</div>
               <span style={{ fontSize: 14, fontWeight: 700 }}>Where to focus next</span>
             </div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,246,248,0.7)', margin: 0 }}>
+            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.7)', margin: 0 }}>
               {weakTopics.length
                 ? <>You're solid on <strong style={{ color: t.OK }}>{topics[0].topic}</strong>. Marks slipped on{' '}
                     <strong style={{ color: t.CORAL }}>{weakTopics.join(', ')}</strong> — worth another practice set before the real paper.</>
@@ -653,7 +667,7 @@ function Results({ t, results, answers, reduceMotion, onRestart, onAsk, toast })
       {/* per-question review */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>Question review</div>
-        {EXAM_QUESTIONS.map((q, i) => (
+        {questions.map((q, i) => (
           <ReviewCard key={q.id} t={t} q={q} r={results[i]} studentAnswer={answers[q.id]} onAsk={() => onAsk(q)} />
         ))}
       </div>
@@ -703,7 +717,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
             <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.45 }}>{q.prompt}</div>
-            <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.4)', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', whiteSpace: 'nowrap' }}>
               {q.topic} {partial && `· ${Math.round(r.score * 100)}%`}
             </span>
           </div>
@@ -715,7 +729,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
           </div>
 
           {/* AI feedback */}
-          <div style={{ marginTop: 12, fontSize: 13.5, color: 'rgba(244,246,248,0.75)', lineHeight: 1.55 }}>
+          <div style={{ marginTop: 12, fontSize: 13.5, color: 'rgba(var(--text-rgb),0.75)', lineHeight: 1.55 }}>
             <span style={{ color, fontWeight: 600 }}>{ok ? '✓ ' : partial ? '◐ ' : '✗ '}</span>
             {r.feedback}
             {r.errorStep ? <span style={{ color: t.CORAL }}> — {r.errorStep}</span> : null}
@@ -736,15 +750,15 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
                 marginTop: 14,
                 padding: '14px 16px',
                 borderRadius: 14,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(var(--fill-rgb),0.04)',
+                border: '1px solid rgba(var(--fill-rgb),0.08)',
                 fontSize: 13.5,
                 lineHeight: 1.65,
-                color: 'rgba(244,246,248,0.8)',
+                color: 'rgba(var(--text-rgb),0.8)',
                 animation: 'qgpop .2s ease both',
               }}
             >
-              <div style={{ fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.4)', marginBottom: 8 }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', marginBottom: 8 }}>
                 Worked solution
               </div>
               {q.workingNotes}
@@ -759,7 +773,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
 function Tag({ label, value, color, t }) {
   return (
     <div style={{ padding: '9px 13px', borderRadius: 12, background: t.hexA(color, 0.1), border: `1px solid ${t.hexA(color, 0.3)}` }}>
-      <div style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(244,246,248,0.45)' }}>{label}</div>
+      <div style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)' }}>{label}</div>
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 15, marginTop: 3 }}>{value}</div>
     </div>
   )
@@ -768,7 +782,7 @@ function Tag({ label, value, color, t }) {
 function SourceTag({ source, t }) {
   const map = {
     ai: { label: 'AI graded', c: t.accent },
-    local: { label: 'Auto-checked', c: 'rgba(244,246,248,0.45)' },
+    local: { label: 'Auto-checked', c: 'rgba(var(--text-rgb),0.45)' },
     'local-fallback': { label: 'Offline check', c: '#FFB347' },
   }
   const s = map[source] || map.local
