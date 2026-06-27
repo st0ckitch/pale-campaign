@@ -200,7 +200,7 @@ export default function App() {
           {tab === 'tutor' && <Tutor t={t} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={() => setConnectOpen(true)} toast={toast} />}
           {tab === 'mastery' && <Mastery t={t} reduceMotion={reduceMotion} onGo={go} />}
           {tab === 'library' && <Library t={t} reduceMotion={reduceMotion} onGo={go} toast={toast} />}
-          {tab === 'teacher' && <Teacher t={t} store={store} toast={toast} reduceMotion={reduceMotion} onGo={go} />}
+          {tab === 'teacher' && <Teacher t={t} store={store} toast={toast} reduceMotion={reduceMotion} onGo={go} aiOn={aiOn} onConnect={() => setConnectOpen(true)} />}
           {tab === 'practice' && <PracticeStub t={t} reduceMotion={reduceMotion} onGo={go} />}
         </main>
       </div>

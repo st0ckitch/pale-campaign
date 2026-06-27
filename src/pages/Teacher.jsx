@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { sub, fill } from '../theme.js'
 import { QUESTION_BANK } from '../lib/useContentStore.js'
+import { scanPaper } from '../lib/vision.js'
 
 const rid = (p) => p + Math.random().toString(36).slice(2, 9)
 const SUBJECT_SUGGESTIONS = [
@@ -9,7 +10,9 @@ const SUBJECT_SUGGESTIONS = [
   'Computer Science', 'Economics', 'French', 'Spanish',
 ]
 
-export default function Teacher({ t, store, toast, reduceMotion, onGo }) {
+export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onConnect }) {
+  const fileRef = useRef(null)
+  const [scanning, setScanning] = useState(false)
   // exam draft
   const [title, setTitle] = useState('')
   const [subject, setSubject] = useState('Mathematics')
@@ -69,6 +72,25 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo }) {
     toast('Question added to this exam')
   }
 
+  async function onScanFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file
+    if (!file) return
+    if (!aiOn) { toast('Connect AI first to scan a paper'); onConnect?.(); return }
+    setScanning(true)
+    try {
+      const qs = await scanPaper(file, subject || 'General')
+      if (!qs.length) { toast('No questions found in that image'); return }
+      setCustomQs((prev) => [...prev, ...qs])
+      if (!title.trim()) setTitle(`${subject || 'Scanned'} — scanned paper`)
+      toast(`Imported ${qs.length} question${qs.length === 1 ? '' : 's'} from the paper`)
+    } catch {
+      toast('Could not read that paper — try a clearer, well-lit photo')
+    } finally {
+      setScanning(false)
+    }
+  }
+
   function createExam() {
     if (!title.trim()) { toast('Give the exam a title'); return }
     const questionIds = isMaths ? QUESTION_BANK.filter((q) => selected[q.id]).map((q) => q.id) : []
@@ -112,6 +134,32 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo }) {
             <datalist id="subjectlist">{SUBJECT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
           </div>
           <div><label style={labelStyle}>Minutes</label><input type="number" min="1" style={inputStyle} value={durationMin} onChange={(e) => setDurationMin(e.target.value)} /></div>
+        </div>
+
+        {/* scan a paper with the camera / a photo */}
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onScanFile} style={{ display: 'none' }} />
+        <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: fill(0.03), border: `1px dashed ${fill(0.18)}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: t.hexA(t.accent, 0.14), border: `1px solid ${t.hexA(t.accent, 0.32)}`, color: t.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /></svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Scan a paper into questions</div>
+            <div style={{ fontSize: 12.5, color: sub(0.55), marginTop: 2 }}>
+              {scanning ? 'Reading the paper with AI…' : `Take a photo or upload an image of a ${subject || 'exam'} paper — AI turns it into editable questions.`}
+            </div>
+          </div>
+          <button
+            onClick={() => (aiOn ? fileRef.current?.click() : onConnect?.())}
+            disabled={scanning}
+            style={{ ...t.cta, padding: '12px 20px', opacity: scanning ? 0.6 : 1 }}
+          >
+            {scanning ? (
+              <span style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid rgba(11,13,16,0.35)', borderTopColor: '#0B0D10', display: 'inline-block', animation: reduceMotion ? 'none' : 'qgspin .8s linear infinite' }} />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z" /><circle cx="12" cy="13" r="3.2" /></svg>
+            )}
+            {scanning ? 'Scanning…' : aiOn ? 'Scan a paper' : 'Connect AI to scan'}
+          </button>
         </div>
 
         {/* maths bank only when relevant */}

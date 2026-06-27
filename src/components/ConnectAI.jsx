@@ -22,8 +22,6 @@ export default function ConnectAI({ t, apiKey, onSave, onClose }) {
           width: 'min(520px, 92vw)',
           borderRadius: 22,
           background: 'var(--panel-bg)',
-          backdropFilter: 'blur(40px)',
-          WebkitBackdropFilter: 'blur(40px)',
           border: '1px solid var(--glass-border)',
           boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
           padding: 26,

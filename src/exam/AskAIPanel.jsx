@@ -129,8 +129,6 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--panel-bg)',
-          backdropFilter: 'blur(40px)',
-          WebkitBackdropFilter: 'blur(40px)',
           borderLeft: '1px solid rgba(var(--fill-rgb),0.12)',
           boxShadow: '-30px 0 90px rgba(0,0,0,0.6)',
           animation: reduceMotion ? 'none' : `qgslide .32s ${t.EASE} both`,
