@@ -121,17 +121,19 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
       <aside
         style={{
           position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
+          right: 18,
+          bottom: 18,
           zIndex: 71,
-          width: 'min(440px, 94vw)',
+          width: 'min(400px, calc(100vw - 36px))',
+          height: 'min(600px, calc(100vh - 110px))',
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--panel-bg)',
-          borderLeft: '1px solid rgba(var(--fill-rgb),0.12)',
-          boxShadow: '-30px 0 90px rgba(0,0,0,0.6)',
-          animation: reduceMotion ? 'none' : `qgslide .32s ${t.EASE} both`,
+          border: '1px solid var(--glass-border)',
+          borderRadius: 22,
+          overflow: 'hidden',
+          boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
+          animation: reduceMotion ? 'none' : `qgpop .24s ${t.EASE} both`,
         }}
       >
         {/* header */}
