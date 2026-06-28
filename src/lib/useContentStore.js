@@ -48,6 +48,8 @@ export function useContentStore() {
 
   const addExam = (exam) =>
     setData((d) => ({ ...d, customExams: [{ ...exam, id: rid('x'), builtin: false }, ...d.customExams] }))
+  const updateExam = (id, patch) =>
+    setData((d) => ({ ...d, customExams: d.customExams.map((e) => (e.id === id ? { ...e, ...patch } : e)) }))
   const deleteExam = (id) =>
     setData((d) => ({ ...d, customExams: d.customExams.filter((e) => e.id !== id) }))
   const addAnnouncement = (a) =>
@@ -60,6 +62,7 @@ export function useContentStore() {
     customExams: data.customExams,
     announcements: data.announcements,
     addExam,
+    updateExam,
     deleteExam,
     addAnnouncement,
     deleteAnnouncement,
@@ -79,8 +82,14 @@ export function examMeta(exam) {
     title: exam.title,
     subject: exam.subject,
     subtitle: exam.builtin ? 'Mixed topics · No calculator' : 'Set by your teacher',
+    description: exam.description || '',
     durationSeconds: (exam.durationMin || 20) * 60,
   }
+}
+
+// total marks for an exam's resolved question list
+export function totalMarks(questions) {
+  return questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
 }
 
 // the seed bank teachers pick from

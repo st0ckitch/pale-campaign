@@ -38,6 +38,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META }) {
   const reduceMotion = useReducedMotion()
   const total = questions.length
+  const totalMkAll = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
 
   const [phase, setPhase] = useState('intro') // intro | active | grading | review
   const [answers, setAnswers] = useState({})
@@ -116,7 +117,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 
   return (
     <div style={{ animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
-      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} meta={meta} />}
+      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} />}
 
       {phase === 'active' && (
         <ActiveExam
@@ -172,7 +173,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 // ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
-function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, meta }) {
+function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta }) {
   const mins = Math.floor(meta.durationSeconds / 60)
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
@@ -182,13 +183,20 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, meta }) {
       <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, letterSpacing: '-0.03em', fontSize: 'clamp(30px,4vw,46px)', margin: '12px 0 0' }}>
         {meta.title}
       </h1>
-      <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.62)', maxWidth: 520 }}>
-        {total} mixed questions — multiple choice and written answers. You have {mins} minutes. Stuck? Ask the AI
-        tutor for a hint on any question — it'll guide your method but won't hand you the answer until you submit.
-      </p>
+      {meta.description ? (
+        <p style={{ margin: '14px 0 0', fontSize: 14.5, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.7)', maxWidth: 560, whiteSpace: 'pre-wrap' }}>
+          {meta.description}
+        </p>
+      ) : (
+        <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.62)', maxWidth: 520 }}>
+          {total} questions — multiple choice and written answers. You have {mins} minutes. Stuck? Ask the AI
+          tutor for a hint on any question — it guides your method but won't hand you the answer until you submit.
+        </p>
+      )}
       <div style={{ display: 'flex', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
         {[
           [String(total), 'Questions'],
+          [String(marks), marks === 1 ? 'Mark' : 'Marks'],
           [`${mins}:00`, 'Time limit'],
           ['AI', 'Graded'],
         ].map(([v, l]) => (
@@ -545,9 +553,11 @@ function GradingSkeleton({ t, reduceMotion }) {
 // Results
 // ---------------------------------------------------------------------------
 function Results({ t, results, answers, questions, total, meta, reduceMotion, onRestart, onAsk, toast }) {
-  const correctCount = results.filter((r) => r.correct).length
-  const scaled = useCountUp(correctCount, true, reduceMotion, 900)
-  const pct = correctCount / total
+  const mk = (q) => Number(q.marks) || 1
+  const totalMk = questions.reduce((s, q) => s + mk(q), 0)
+  const earnedMk = results.reduce((s, r, i) => s + r.score * mk(questions[i]), 0)
+  const scaled = useCountUp(earnedMk, true, reduceMotion, 900)
+  const pct = totalMk ? earnedMk / totalMk : 0
 
   // ring
   const R = 52
@@ -559,9 +569,10 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
     const map = {}
     questions.forEach((q, i) => {
       const r = results[i]
+      const w = mk(q)
       if (!map[q.topic]) map[q.topic] = { sum: 0, n: 0 }
-      map[q.topic].sum += r.score
-      map[q.topic].n += 1
+      map[q.topic].sum += r.score * w
+      map[q.topic].n += w
     })
     return Object.entries(map)
       .map(([topic, { sum, n }]) => ({ topic, pct: Math.round((sum / n) * 100) }))
@@ -593,10 +604,10 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 44, letterSpacing: '-0.03em' }}>
-                {Math.round(scaled)}<span style={{ fontSize: 24, color: 'rgba(var(--text-rgb),0.45)' }}>/{total}</span>
+                {Math.round(scaled)}<span style={{ fontSize: 24, color: 'rgba(var(--text-rgb),0.45)' }}>/{totalMk}</span>
               </div>
               <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)' }}>
-                {Math.round(pct * 100)}%
+                {Math.round(pct * 100)}% · marks
               </div>
             </div>
           </div>
@@ -687,6 +698,8 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
   const ok = r.correct
   const partial = !ok && r.score > 0
   const color = ok ? t.OK : partial ? '#FFB347' : t.CORAL
+  const marks = Number(q.marks) || 1
+  const earned = Math.round(r.score * marks)
   const given = (studentAnswer ?? '').toString().trim() || '—'
 
   return (
@@ -718,7 +731,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
             <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.45 }}>{q.prompt}</div>
             <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', whiteSpace: 'nowrap' }}>
-              {q.topic} {partial && `· ${Math.round(r.score * 100)}%`}
+              {q.topic} · {earned}/{marks} mark{marks === 1 ? '' : 's'}
             </span>
           </div>
 

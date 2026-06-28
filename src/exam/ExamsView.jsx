@@ -44,7 +44,9 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {store.exams.map((e) => {
-          const qn = resolveQuestions(e).length
+          const qs = resolveQuestions(e)
+          const qn = qs.length
+          const marks = qs.reduce((s, q) => s + (Number(q.marks) || 1), 0)
           return (
             <div key={e.id} style={{ ...t.GLASS, borderRadius: 20, padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -56,6 +58,8 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
               <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3 }}>{e.title}</div>
               <div style={{ display: 'flex', gap: 16, fontSize: 12.5, color: sub(0.6) }}>
                 <span>{qn} question{qn === 1 ? '' : 's'}</span>
+                <span>·</span>
+                <span>{marks} mark{marks === 1 ? '' : 's'}</span>
                 <span>·</span>
                 <span>{e.durationMin} min</span>
                 {e.due && e.due !== 'Anytime' && (<><span>·</span><span>Due {e.due}</span></>)}
