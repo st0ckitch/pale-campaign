@@ -179,7 +179,7 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta }
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ marginBottom: 18 }}>
-        <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={30} plaque fallback={null} />
+        <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={40} plaque fallback={null} />
       </div>
       <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
         Exam simulator{meta.subject ? ` · ${meta.subject}` : ''}
@@ -594,7 +594,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
         {/* score ring */}
         <div style={{ ...t.GLASS, borderRadius: 24, padding: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ marginBottom: 20 }}>
-            <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={26} plaque fallback={null} />
+            <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={34} plaque fallback={null} />
           </div>
           <div style={{ position: 'relative', width: 160, height: 160 }}>
             <svg width="160" height="160" viewBox="0 0 160 160" style={{ transform: 'rotate(-90deg)' }}>

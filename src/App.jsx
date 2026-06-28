@@ -120,7 +120,7 @@ export default function App() {
         <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* TOPBAR */}
           <header style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-            <BrandLogo key={`wm-${brand}`} brand={brand} variant="wordmark" height={30} plaque fallback={null} />
+            <BrandLogo key={`wm-${brand}`} brand={brand} variant="wordmark" height={40} plaque fallback={null} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>
                 Welcome back, Nino 👋

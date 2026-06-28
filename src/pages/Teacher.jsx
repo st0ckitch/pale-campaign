@@ -57,9 +57,11 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
   }
 
   async function onScanFiles(e) {
-    const files = e.target.files
+    // Snapshot the files BEFORE clearing the input — reading e.target.files after
+    // resetting value would give an empty list (that was the "nothing happens" bug).
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
-    if (!files || !files.length) return
+    if (!files.length) return
     if (!aiOn) { toast('Connect AI first to scan a paper'); onConnect?.(); return }
     setScanning(true)
     try {
@@ -70,8 +72,9 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
       if (res.durationMin) setDurationMin(res.durationMin)
       setCustomQs((qs) => [...qs, ...res.questions])
       toast(`Imported ${res.questions.length} question${res.questions.length === 1 ? '' : 's'} — review & edit below`)
-    } catch {
-      toast('Could not read those pages — try clearer, well-lit photos')
+    } catch (err) {
+      console.error('Scan failed:', err)
+      toast('Could not read that — check AI is connected, then try again')
     } finally {
       setScanning(false)
     }

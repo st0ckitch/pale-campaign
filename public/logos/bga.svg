@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 96" fill="none" role="img" aria-label="British-Georgian Academy">
+  <g>
+    <!-- emblem: rounded crest with BGA monogram -->
+    <path d="M22 46 H62 V63 C62 80 42 90 42 90 C42 90 22 80 22 63 Z" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+    <path d="M20 34 L30 17 L42 32 L54 17 L64 34 Z" fill="#FFFFFF"/>
+    <rect x="20" y="32" width="44" height="7" rx="2" fill="#FFFFFF"/>
+    <text x="42" y="74" text-anchor="middle" font-family="'Space Grotesk', Arial, sans-serif" font-size="20" font-weight="700" fill="#FFFFFF">B</text>
+  </g>
+  <text x="86" y="44" font-family="'Space Grotesk', Georgia, serif" font-size="30" font-weight="700" letter-spacing="0.2" fill="#FFFFFF">British-Georgian</text>
+  <text x="86" y="80" font-family="'Space Grotesk', Georgia, serif" font-size="30" font-weight="700" letter-spacing="0.2" fill="#FFFFFF">Academy</text>
+</svg>
