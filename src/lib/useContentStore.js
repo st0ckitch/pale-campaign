@@ -17,6 +17,7 @@ function builtinExam() {
     questionIds: EXAM_QUESTIONS.map((q) => q.id),
     builtin: true,
     due: 'Anytime',
+    passMark: 50,
   }
 }
 
@@ -84,6 +85,7 @@ export function examMeta(exam) {
     subtitle: exam.builtin ? 'Mixed topics · No calculator' : 'Set by your teacher',
     description: exam.description || '',
     durationSeconds: (exam.durationMin || 20) * 60,
+    passMark: Number(exam.passMark) >= 0 ? Number(exam.passMark) : 50,
   }
 }
 

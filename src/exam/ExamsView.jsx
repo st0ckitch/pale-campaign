@@ -62,6 +62,8 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
                 <span>{marks} mark{marks === 1 ? '' : 's'}</span>
                 <span>·</span>
                 <span>{e.durationMin} min</span>
+                <span>·</span>
+                <span>pass {e.passMark ?? 50}%</span>
                 {e.due && e.due !== 'Anytime' && (<><span>·</span><span>Due {e.due}</span></>)}
               </div>
               <button

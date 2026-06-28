@@ -558,6 +558,9 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
   const earnedMk = results.reduce((s, r, i) => s + r.score * mk(questions[i]), 0)
   const scaled = useCountUp(earnedMk, true, reduceMotion, 900)
   const pct = totalMk ? earnedMk / totalMk : 0
+  const passMark = meta.passMark ?? 50
+  const passed = pct * 100 >= passMark
+  const grade = gradeBand(pct)
 
   // ring
   const R = 52
@@ -598,7 +601,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
                 strokeWidth="10"
                 strokeLinecap="round"
                 strokeDasharray={C}
-                strokeDashoffset={reduceMotion ? off : C * (1 - scaled / total)}
+                strokeDashoffset={reduceMotion ? off : C * (1 - (totalMk ? scaled / totalMk : 0))}
                 style={{ transition: reduceMotion ? 'none' : `stroke-dashoffset .9s ${t.EASE}` }}
               />
             </svg>
@@ -611,9 +614,26 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
               </div>
             </div>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>{verdict(pct)}</div>
-          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 4, textAlign: 'center' }}>
-            {meta.title} · {meta.subtitle}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17 }}>{grade}</span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                padding: '5px 12px',
+                borderRadius: 999,
+                color: passed ? t.OK : t.CORAL,
+                background: passed ? 'rgba(52,199,150,0.14)' : t.hexA(t.CORAL, 0.14),
+                border: `1px solid ${passed ? 'rgba(52,199,150,0.5)' : t.hexA(t.CORAL, 0.5)}`,
+              }}
+            >
+              {passed ? 'Pass' : 'Below pass'}
+            </span>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 6, textAlign: 'center' }}>
+            Pass mark {passMark}% · {meta.title}
           </div>
           <button style={{ ...t.ghostBtn, marginTop: 18 }} onClick={onRestart}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -686,11 +706,18 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
   )
 }
 
-function verdict(pct) {
-  if (pct >= 0.9) return 'Outstanding'
-  if (pct >= 0.7) return 'Strong pass · Merit'
-  if (pct >= 0.5) return 'Pass — keep pushing'
-  return 'Needs more practice'
+// GCSE-style 9–1 grade band from the marks percentage.
+function gradeBand(pct) {
+  const p = pct * 100
+  if (p >= 90) return 'Grade 9'
+  if (p >= 80) return 'Grade 8'
+  if (p >= 70) return 'Grade 7'
+  if (p >= 60) return 'Grade 6'
+  if (p >= 50) return 'Grade 5'
+  if (p >= 40) return 'Grade 4'
+  if (p >= 30) return 'Grade 3'
+  if (p >= 20) return 'Grade 2'
+  return 'Grade 1'
 }
 
 function ReviewCard({ t, q, r, studentAnswer, onAsk }) {

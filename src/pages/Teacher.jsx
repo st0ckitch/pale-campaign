@@ -28,6 +28,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
   const [durationMin, setDurationMin] = useState(20)
   const [due, setDue] = useState('')
   const [description, setDescription] = useState('')
+  const [passMark, setPassMark] = useState(50)
   const [customQs, setCustomQs] = useState([])
 
   const [annTitle, setAnnTitle] = useState('')
@@ -52,7 +53,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
   const addFromBank = (q) => setCustomQs((qs) => [...qs, { ...q, id: rid('bk'), subject, marks: q.marks || 1 }])
 
   function resetDraft() {
-    setEditingId(null); setTitle(''); setSubject('Mathematics'); setDurationMin(20); setDue(''); setDescription(''); setCustomQs([])
+    setEditingId(null); setTitle(''); setSubject('Mathematics'); setDurationMin(20); setDue(''); setDescription(''); setPassMark(50); setCustomQs([])
   }
 
   async function onScanFiles(e) {
@@ -83,6 +84,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
     setDurationMin(exam.durationMin || 20)
     setDue(exam.due && exam.due !== 'Anytime' ? exam.due : '')
     setDescription(exam.description || '')
+    setPassMark(Number(exam.passMark) >= 0 ? Number(exam.passMark) : 50)
     setCustomQs(resolveQuestions(exam).map((q) => ({ ...q, id: q.id || rid('q'), marks: q.marks || 1 })))
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
@@ -93,7 +95,9 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
     if (!clean.length) { toast('Add at least one question'); return }
     const payload = {
       title: title.trim(), subject: subject.trim() || 'General', durationMin: Number(durationMin) || 20,
-      due: due.trim() || 'Anytime', description: description.trim(), questionIds: [], customQuestions: clean,
+      due: due.trim() || 'Anytime', description: description.trim(),
+      passMark: Math.max(0, Math.min(100, Math.round(Number(passMark) || 0))),
+      questionIds: [], customQuestions: clean,
     }
     if (editingId) { store.updateExam(editingId, payload); toast('Exam updated') }
     else { store.addExam(payload); toast('Exam published — students can see it now') }
@@ -201,7 +205,12 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
         )}
 
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 18, flexWrap: 'wrap' }}>
-          <input style={{ ...inputStyle, width: 200 }} value={due} onChange={(e) => setDue(e.target.value)} placeholder="Due (e.g. Fri 12 Jun)" />
+          <input style={{ ...inputStyle, width: 180 }} value={due} onChange={(e) => setDue(e.target.value)} placeholder="Due (e.g. Fri 12 Jun)" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12.5, color: sub(0.55) }}>Pass mark</span>
+            <input type="number" min="0" max="100" value={passMark} onChange={(e) => setPassMark(e.target.value)} style={{ ...inputStyle, width: 72, textAlign: 'center' }} />
+            <span style={{ fontSize: 12.5, color: sub(0.55) }}>%</span>
+          </div>
           <button style={t.cta} onClick={save}>{editingId ? 'Save changes' : 'Publish exam'}</button>
           <span style={{ fontSize: 12.5, color: sub(0.5) }}>{customQs.length} question{customQs.length === 1 ? '' : 's'} · {totalMarks} mark{totalMarks === 1 ? '' : 's'} · {subject || 'General'}</span>
         </div>
