@@ -25,13 +25,26 @@ export async function fileToImage(file, maxDim = 1568, quality = 0.82) {
   return { media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', quality).split(',')[1] }
 }
 
+// Read any file to raw base64 (used for PDFs, which Claude can read directly).
+export async function fileToBase64(file) {
+  const dataUrl = await new Promise((res, rej) => {
+    const fr = new FileReader()
+    fr.onload = () => res(fr.result)
+    fr.onerror = rej
+    fr.readAsDataURL(file)
+  })
+  return String(dataUrl).split(',')[1]
+}
+
+const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')
+
 const SYSTEM =
   'You digitise photographed exam papers (which may span several images = pages) ' +
   'into structured data. Respond with ONLY valid JSON — a single object, no ' +
   'markdown fences, no commentary.'
 
 const PROMPT =
-  'These images are the pages of one exam paper, in order. Read ALL pages and ' +
+  'The attached file(s) are one exam paper — images and/or a PDF, in order. Read ALL pages and ' +
   'return ONLY this JSON object:\n' +
   '{\n' +
   '  "title": exam name/title or null,\n' +
@@ -85,21 +98,21 @@ function mapQuestion(it, subject) {
 
 // Scan one or more page images into { title, description, durationMin, questions[] }.
 export async function scanPaper(files, subject, signal) {
-  const list = Array.from(files).slice(0, 8) // cap pages to keep the request reasonable
-  const images = []
-  for (const f of list) images.push(await fileToImage(f))
+  const list = Array.from(files).slice(0, 8) // cap files to keep the request reasonable
+  const blocks = []
+  for (const f of list) {
+    if (isPdf(f)) {
+      const data = await fileToBase64(f)
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } })
+    } else {
+      const im = await fileToImage(f)
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })
+    }
+  }
 
   const text = await callAnthropic({
     system: SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          ...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
-          { type: 'text', text: PROMPT },
-        ],
-      },
-    ],
+    messages: [{ role: 'user', content: [...blocks, { type: 'text', text: PROMPT }] }],
     maxTokens: 4096,
     model: MODEL,
     signal,

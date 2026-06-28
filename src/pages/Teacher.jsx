@@ -69,7 +69,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
       if (res.description && !description.trim()) setDescription(res.description)
       if (res.durationMin) setDurationMin(res.durationMin)
       setCustomQs((qs) => [...qs, ...res.questions])
-      toast(`Imported ${res.questions.length} question${res.questions.length === 1 ? '' : 's'} from ${res.pages} page${res.pages === 1 ? '' : 's'} — review & edit below`)
+      toast(`Imported ${res.questions.length} question${res.questions.length === 1 ? '' : 's'} — review & edit below`)
     } catch {
       toast('Could not read those pages — try clearer, well-lit photos')
     } finally {
@@ -145,7 +145,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
         </div>
 
         {/* scan pages */}
-        <input ref={fileRef} type="file" accept="image/*" multiple onChange={onScanFiles} style={{ display: 'none' }} />
+        <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf" multiple onChange={onScanFiles} style={{ display: 'none' }} />
         <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: fill(0.03), border: `1px dashed ${fill(0.18)}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: t.hexA(t.accent, 0.14), border: `1px solid ${t.hexA(t.accent, 0.32)}`, color: t.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z" /><circle cx="12" cy="13" r="3.2" /></svg>
@@ -153,7 +153,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 14, fontWeight: 700 }}>Scan a paper into questions</div>
             <div style={{ fontSize: 12.5, color: sub(0.55), marginTop: 2 }}>
-              {scanning ? 'Reading all pages with AI…' : 'Upload or photograph one or more pages — AI reads the title, instructions, questions, types & marks. You can edit everything after.'}
+              {scanning ? 'Reading the paper with AI…' : 'Upload a PDF, or photograph/upload page images — AI reads the title, instructions, questions, types & marks. You can edit everything after.'}
             </div>
           </div>
           <button onClick={() => (aiOn ? fileRef.current?.click() : onConnect?.())} disabled={scanning} style={{ ...t.cta, padding: '12px 20px', opacity: scanning ? 0.6 : 1 }}>
