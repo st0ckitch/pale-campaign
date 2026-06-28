@@ -3,6 +3,7 @@ import { EXAM_QUESTIONS, EXAM_META } from '../data/examQuestions.js'
 import { gradeQuestion } from '../lib/grading.js'
 import { useReducedMotion } from '../lib/useReducedMotion.js'
 import MathText from '../components/MathText.jsx'
+import BrandLogo from '../components/BrandLogo.jsx'
 import AskAIPanel from './AskAIPanel.jsx'
 
 // count-up animation for the score ring / number
@@ -177,6 +178,9 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta }
   const mins = Math.floor(meta.durationSeconds / 60)
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ marginBottom: 18 }}>
+        <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={30} plaque fallback={null} />
+      </div>
       <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
         Exam simulator{meta.subject ? ` · ${meta.subject}` : ''}
       </div>
@@ -589,6 +593,9 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 20 }}>
         {/* score ring */}
         <div style={{ ...t.GLASS, borderRadius: 24, padding: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ marginBottom: 20 }}>
+            <BrandLogo key={t.brand} brand={t.brand} variant="wordmark" height={26} plaque fallback={null} />
+          </div>
           <div style={{ position: 'relative', width: 160, height: 160 }}>
             <svg width="160" height="160" viewBox="0 0 160 160" style={{ transform: 'rotate(-90deg)' }}>
               <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(var(--fill-rgb),0.08)" strokeWidth="10" />

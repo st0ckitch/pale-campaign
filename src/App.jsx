@@ -9,6 +9,7 @@ import Mastery from './pages/Mastery.jsx'
 import Library from './pages/Library.jsx'
 import Teacher from './pages/Teacher.jsx'
 import ConnectAI from './components/ConnectAI.jsx'
+import BrandLogo from './components/BrandLogo.jsx'
 import { useContentStore } from './lib/useContentStore.js'
 
 const NAV = [
@@ -90,7 +91,7 @@ export default function App() {
           }}
         >
           <div style={t.brandMark} onClick={() => setBrand((b) => (b === 'BIST' ? 'BGA' : 'BIST'))} title="Switch school">
-            {brand}
+            <BrandLogo key={brand} brand={brand} variant="mark" height={30} fallback={brand} />
           </div>
           <div style={{ width: 26, height: 1, background: 'var(--glass-border)' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
@@ -119,6 +120,7 @@ export default function App() {
         <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* TOPBAR */}
           <header style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+            <BrandLogo key={`wm-${brand}`} brand={brand} variant="wordmark" height={30} plaque fallback={null} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>
                 Welcome back, Nino 👋
