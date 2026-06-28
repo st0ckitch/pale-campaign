@@ -73,6 +73,47 @@ function parseObjectJSON(text) {
   return JSON.parse(t.slice(start, end + 1))
 }
 
+// Pull every top-level {...} object out of an array body, parsing each on its
+// own. Tolerant of truncation and missing commas — a malformed/cut-off object
+// is simply skipped, so we still recover all the complete questions.
+function extractObjects(body) {
+  const objs = []
+  let depth = 0
+  let start = -1
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (c === '\\') esc = true
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') inStr = true
+    else if (c === '{') { if (depth === 0) start = i; depth++ }
+    else if (c === '}') { depth--; if (depth === 0 && start >= 0) { try { objs.push(JSON.parse(body.slice(start, i + 1))) } catch { /* skip */ } start = -1 } }
+    else if (c === ']' && depth === 0) break
+  }
+  return objs
+}
+
+// Best-effort recovery when strict JSON parsing fails (truncated / malformed).
+export function salvageExam(text) {
+  const grab = (key) => {
+    const m = text.match(new RegExp('"' + key + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'))
+    return m ? m[1].replace(/\\"/g, '"').replace(/\\n/g, ' ') : ''
+  }
+  const dm = text.match(/"durationMin"\s*:\s*(\d+)/)
+  const qi = text.indexOf('"questions"')
+  let questions = []
+  if (qi >= 0) {
+    const br = text.indexOf('[', qi)
+    if (br >= 0) questions = extractObjects(text.slice(br + 1))
+  }
+  return { title: grab('title'), description: grab('description'), durationMin: dm ? Number(dm[1]) : null, questions }
+}
+
 const rid = (p) => p + Math.random().toString(36).slice(2, 9)
 
 function mapQuestion(it, subject) {
@@ -113,15 +154,26 @@ export async function scanPaper(files, subject, signal) {
   const text = await callAnthropic({
     system: SYSTEM,
     messages: [{ role: 'user', content: [...blocks, { type: 'text', text: PROMPT }] }],
-    maxTokens: 4096,
+    maxTokens: 8192,
     model: MODEL,
     signal,
   })
 
-  const obj = parseObjectJSON(text)
-  const questions = Array.isArray(obj.questions)
-    ? obj.questions.filter((it) => it && it.prompt).map((it) => mapQuestion(it, subject))
-    : []
+  // Strict parse first; if the model's JSON is truncated/malformed (long papers),
+  // fall back to a tolerant salvage that recovers every complete question.
+  let obj
+  try {
+    obj = parseObjectJSON(text)
+  } catch {
+    obj = salvageExam(text)
+  }
+  if (!Array.isArray(obj.questions) || obj.questions.length === 0) {
+    const salvaged = salvageExam(text)
+    if (salvaged.questions.length) obj = { ...obj, ...salvaged, questions: salvaged.questions }
+  }
+  const questions = (Array.isArray(obj.questions) ? obj.questions : [])
+    .filter((it) => it && it.prompt)
+    .map((it) => mapQuestion(it, subject))
   return {
     title: obj.title ? String(obj.title) : '',
     description: obj.description ? String(obj.description) : '',
