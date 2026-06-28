@@ -57,7 +57,7 @@ export default function App() {
       {/* fine noise overlay */}
       <div
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
           pointerEvents: 'none',
           opacity: 0.035,
@@ -80,8 +80,8 @@ export default function App() {
             gap: 18,
             borderRadius: 26,
             background: 'var(--rail-bg)',
-            backdropFilter: 'blur(40px)',
-            WebkitBackdropFilter: 'blur(40px)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--glass-border)',
             boxShadow: 'var(--glass-shadow)',
             position: 'sticky',

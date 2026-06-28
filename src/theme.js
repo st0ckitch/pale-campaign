@@ -24,8 +24,8 @@ export const EASE = 'cubic-bezier(.22,1,.36,1)'
 // The frosted glass surface used by every card.
 export const GLASS = {
   background: 'var(--glass-bg)',
-  backdropFilter: 'blur(40px)',
-  WebkitBackdropFilter: 'blur(40px)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
   border: '1px solid var(--glass-border)',
   boxShadow: 'var(--glass-shadow)',
 }
@@ -102,7 +102,7 @@ export function getTheme(brand) {
     },
 
     bloom: {
-      position: 'absolute',
+      position: 'fixed',
       inset: 0,
       pointerEvents: 'none',
       animation: 'qgbloom 22s ease-in-out infinite',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { callAnthropic, streamReveal } from '../lib/anthropic.js'
 import { MODEL } from '../lib/config.js'
+import Markdown from '../components/Markdown.jsx'
 
 // System prompts differ by phase to protect exam integrity.
 function systemFor(mode, question) {
@@ -121,11 +122,12 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
       <aside
         style={{
           position: 'fixed',
-          right: 18,
-          bottom: 18,
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           zIndex: 71,
-          width: 'min(400px, calc(100vw - 36px))',
-          height: 'min(600px, calc(100vh - 110px))',
+          width: 'min(440px, calc(100vw - 32px))',
+          height: 'min(620px, calc(100vh - 80px))',
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--panel-bg)',
@@ -133,7 +135,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
           borderRadius: 22,
           overflow: 'hidden',
           boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
-          animation: reduceMotion ? 'none' : `qgpop .24s ${t.EASE} both`,
+          animation: reduceMotion ? 'none' : 'qgfadein .2s ease both',
         }}
       >
         {/* header */}
@@ -240,7 +242,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
                     }
               }
             >
-              {m.text}
+              {m.role === 'assistant' ? <Markdown text={m.text} /> : m.text}
               {m.streaming && (
                 <span
                   style={{

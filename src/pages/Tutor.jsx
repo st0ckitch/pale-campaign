@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { sub, fill } from '../theme.js'
 import { callAnthropic, streamReveal } from '../lib/anthropic.js'
 import { MODEL } from '../lib/config.js'
+import Markdown from '../components/Markdown.jsx'
 
 const SYSTEM =
   'You are a friendly, encouraging tutor for IGCSE/GCSE and A-Level students ' +
@@ -82,8 +83,8 @@ export default function Tutor({ t, reduceMotion, aiOn, onConnect, toast }) {
           {messages.map((m, i) => (
             <div key={i} style={m.role === 'user'
               ? { alignSelf: 'flex-end', maxWidth: '78%', padding: '13px 16px', borderRadius: '18px 18px 4px 18px', background: t.hexA(t.accent, 0.16), border: `1px solid ${t.hexA(t.accent, 0.32)}`, fontSize: 14.5, lineHeight: 1.55 }
-              : { alignSelf: 'flex-start', maxWidth: '84%', padding: '13px 16px', borderRadius: '18px 18px 18px 4px', background: fill(0.06), border: `1px solid ${t.hexA(t.accent, 0.22)}`, fontSize: 14.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-              {m.text}
+              : { alignSelf: 'flex-start', maxWidth: '84%', padding: '13px 16px', borderRadius: '18px 18px 18px 4px', background: fill(0.06), border: `1px solid ${t.hexA(t.accent, 0.22)}`, fontSize: 14.5, lineHeight: 1.55 }}>
+              {m.role === 'assistant' ? <Markdown text={m.text} /> : m.text}
               {m.streaming && <span style={{ display: 'inline-block', width: 7, height: 15, marginLeft: 2, verticalAlign: '-2px', background: t.accent, animation: reduceMotion ? 'none' : 'qgblink 1s steps(1) infinite' }} />}
             </div>
           ))}
