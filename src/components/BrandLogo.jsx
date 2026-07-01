@@ -21,7 +21,7 @@ function logoBase() {
 function candidates(brand, variant) {
   const name = variant === 'mark' ? `${brand.toLowerCase()}-mark` : brand.toLowerCase()
   const base = logoBase()
-  return ['svg', 'png', 'webp'].map((ext) => `${base}logos/${name}.${ext}`)
+  return ['png', 'svg', 'webp'].map((ext) => `${base}logos/${name}.${ext}`)
 }
 
 export default function BrandLogo({ brand, variant = 'wordmark', height = 28, plaque = false, fallback = null }) {
