@@ -7,18 +7,44 @@ import ExamModule from './ExamModule.jsx'
 // launches the chosen one through the shared, data-driven ExamModule.
 export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMotion, onGo }) {
   const [activeId, setActiveId] = useState(null)
+  const [practice, setPractice] = useState(null) // AI-generated set: { questions, meta, key }
   const active = store.exams.find((e) => e.id === activeId)
+
+  const backBtn = (onClick, label) => (
+    <button
+      onClick={onClick}
+      style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", background: fill(0.05), border: `1px solid ${fill(0.12)}`, color: 'var(--ink)' }}
+    >
+      {label}
+    </button>
+  )
+
+  const launchPractice = (qs, m) => setPractice({ questions: qs, meta: m, key: 'p' + Math.random().toString(36).slice(2, 8) })
+
+  // A generated practice set takes precedence over the exam it came from.
+  if (practice) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {backBtn(() => { setPractice(null); setActiveId(null) }, '‹ Back to exams')}
+        <ExamModule
+          key={practice.key}
+          theme={t}
+          toast={toast}
+          aiOn={aiOn}
+          onConnect={onConnect}
+          questions={practice.questions}
+          meta={practice.meta}
+          onGeneratePractice={launchPractice}
+        />
+      </div>
+    )
+  }
 
   if (active) {
     const questions = resolveQuestions(active).map((q) => ({ ...q, subject: q.subject || active.subject }))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <button
-          onClick={() => setActiveId(null)}
-          style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", background: fill(0.05), border: `1px solid ${fill(0.12)}`, color: 'var(--ink)' }}
-        >
-          ‹ All exams
-        </button>
+        {backBtn(() => setActiveId(null), '‹ All exams')}
         <ExamModule
           key={active.id}
           theme={t}
@@ -27,6 +53,7 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           onConnect={onConnect}
           questions={questions}
           meta={examMeta(active)}
+          onGeneratePractice={launchPractice}
         />
       </div>
     )

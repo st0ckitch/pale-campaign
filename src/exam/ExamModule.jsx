@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EXAM_QUESTIONS, EXAM_META } from '../data/examQuestions.js'
 import { gradeQuestion } from '../lib/grading.js'
+import { generateSimilar } from '../lib/generate.js'
 import { useReducedMotion } from '../lib/useReducedMotion.js'
 import MathText from '../components/MathText.jsx'
 import BrandLogo from '../components/BrandLogo.jsx'
@@ -36,10 +37,11 @@ function fmtTime(s) {
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
-export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META }) {
+export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, onGeneratePractice }) {
   const reduceMotion = useReducedMotion()
   const total = questions.length
   const totalMkAll = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
+  const [genBusy, setGenBusy] = useState(false)
 
   const [phase, setPhase] = useState('intro') // intro | active | grading | review
   const [answers, setAnswers] = useState({})
@@ -113,6 +115,41 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
     setPhase('active')
   }
 
+  // Generate a fresh AI practice set similar to this exam and hand it to the
+  // parent to launch as a new (practice) exam.
+  async function makePractice(topics = [], seeds) {
+    if (genBusy) return
+    if (!aiOn) { toast('Connect AI to generate practice questions'); onConnect?.(); return }
+    setGenBusy(true)
+    toast('Generating practice questions…')
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      const qs = await generateSimilar({
+        seeds: seeds && seeds.length ? seeds : questions,
+        topics,
+        subject: meta.subject || 'General',
+        count: 5,
+        signal: controller.signal,
+      })
+      if (!qs.length) { toast('Could not generate — try again'); return }
+      const pmeta = {
+        title: `Practice${topics && topics.length ? ` · ${topics.join(', ')}` : ` · ${meta.subject || 'set'}`}`,
+        subject: meta.subject || 'General',
+        subtitle: 'AI practice set',
+        description: 'Fresh AI-generated questions, similar in style to your exam.',
+        durationSeconds: Math.max(600, qs.length * 120),
+        passMark: meta.passMark ?? 50,
+      }
+      onGeneratePractice?.(qs, pmeta)
+    } catch (err) {
+      console.error('Practice generation failed:', err)
+      toast('Generation failed — check the AI connection')
+    } finally {
+      setGenBusy(false)
+    }
+  }
+
   const lowTime = secondsLeft < 120
   const q = questions[current]
 
@@ -154,6 +191,8 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
           onRestart={restart}
           onAsk={(question) => setAskFor(question)}
           toast={toast}
+          onPractice={makePractice}
+          genBusy={genBusy}
         />
       )}
 
@@ -556,7 +595,7 @@ function GradingSkeleton({ t, reduceMotion }) {
 // ---------------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------------
-function Results({ t, results, answers, questions, total, meta, reduceMotion, onRestart, onAsk, toast }) {
+function Results({ t, results, answers, questions, total, meta, reduceMotion, onRestart, onAsk, toast, onPractice, genBusy }) {
   const mk = (q) => Number(q.marks) || 1
   const totalMk = questions.reduce((s, q) => s + mk(q), 0)
   const earnedMk = results.reduce((s, r, i) => s + r.score * mk(questions[i]), 0)
@@ -693,10 +732,11 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
                 : <>Excellent — strong, consistent work across <strong style={{ color: t.OK }}>every topic</strong>. Keep the momentum going.</>}
             </p>
             <button
-              style={{ ...t.ghostBtn, marginTop: 16 }}
-              onClick={() => toast(weakTopics.length ? `Building a practice set on ${weakTopics.join(', ')}…` : 'Building a fresh challenge set…')}
+              disabled={genBusy}
+              style={{ ...t.ghostBtn, marginTop: 16, opacity: genBusy ? 0.6 : 1 }}
+              onClick={() => onPractice(weakTopics.length ? weakTopics : topics.slice(0, 3).map((x) => x.topic))}
             >
-              Generate a practice set on my weak topics →
+              {genBusy ? 'Generating…' : (weakTopics.length ? 'Generate practice on my weak topics →' : 'Generate a fresh practice set →')}
             </button>
           </div>
         </div>
@@ -706,7 +746,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>Question review</div>
         {questions.map((q, i) => (
-          <ReviewCard key={q.id} t={t} q={q} r={results[i]} studentAnswer={answers[q.id]} onAsk={() => onAsk(q)} />
+          <ReviewCard key={q.id} t={t} q={q} r={results[i]} studentAnswer={answers[q.id]} onAsk={() => onAsk(q)} onPractice={onPractice} genBusy={genBusy} />
         ))}
       </div>
     </div>
@@ -727,7 +767,7 @@ function gradeBand(pct) {
   return 'Grade 1'
 }
 
-function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
+function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
   const [open, setOpen] = useState(false)
   const ok = r.correct
   const partial = !ok && r.score > 0
@@ -789,6 +829,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk }) {
               {open ? 'Hide working' : 'Show working'}
             </button>
             <button onClick={onAsk} style={{ ...t.ghostBtn }}>Ask AI 💡</button>
+            <button disabled={genBusy} onClick={() => onPractice([q.topic], [q])} style={{ ...t.ghostBtn, opacity: genBusy ? 0.6 : 1 }}>Practise similar ↻</button>
           </div>
 
           {open && (
