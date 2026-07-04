@@ -152,11 +152,42 @@ async function gradeTextWithAI(question, studentAnswer, local, signal) {
   return parseGraderJSON(text)
 }
 
+// An image answer is a drawn/photographed response: { image, media_type, kind }.
+export function isImageAnswer(a) {
+  return !!(a && typeof a === 'object' && a.image)
+}
+
+// Grade a handwritten / drawn answer image with Claude vision.
+async function gradeImageWithAI(question, img, signal) {
+  const subject = question.subject ? `Subject: ${question.subject}\n` : ''
+  const scheme = question.markScheme ? `Mark scheme: ${question.markScheme}\n` : ''
+  const promptText =
+    subject +
+    `Question: ${question.prompt}\n` +
+    `Expected answer: ${question.correctAnswer}\n` +
+    scheme +
+    "The image is the student's handwritten/drawn answer and working. Read it carefully and grade it.\n" +
+    'Return ONLY this JSON: ' +
+    '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
+    '"feedback": "one sentence", "errorStep": "where they went wrong or null" }'
+  const text = await callAnthropic({
+    system: GRADER_SYSTEM,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: promptText },
+      { type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image } },
+    ] }],
+    maxTokens: 1000,
+    model: MODEL,
+    signal,
+  })
+  return parseGraderJSON(text)
+}
+
 // ===========================================================================
-// Public: grade one question (handles MCQ + text, both layers, fallbacks)
+// Public: grade one question (handles MCQ + text/image, both layers, fallbacks)
 // ===========================================================================
 export async function gradeQuestion(question, studentAnswer, signal) {
-  const answered = studentAnswer != null && String(studentAnswer).trim() !== ''
+  const answered = studentAnswer != null && (isImageAnswer(studentAnswer) ? true : String(studentAnswer).trim() !== '')
 
   // ---- MCQ: deterministic ----
   if (question.type === 'mcq') {
@@ -176,9 +207,6 @@ export async function gradeQuestion(question, studentAnswer, signal) {
     }
   }
 
-  // ---- TEXT: Layer 1 always, Layer 2 when reachable ----
-  const local = checkLocally(studentAnswer, question.acceptedAnswers)
-
   if (!answered) {
     return {
       id: question.id,
@@ -190,6 +218,38 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       errorStep: null,
     }
   }
+
+  // ---- Handwritten / drawn / photographed answer: grade with vision ----
+  if (isImageAnswer(studentAnswer)) {
+    try {
+      const ai = await gradeImageWithAI(question, studentAnswer, signal)
+      return {
+        id: question.id,
+        answered: true,
+        correct: ai.correct || ai.equivalent,
+        score: ai.score,
+        source: 'ai',
+        feedback: ai.feedback || (ai.correct ? 'Correct.' : 'Not quite.'),
+        errorStep: ai.errorStep,
+      }
+    } catch (err) {
+      const isUnavailable = err instanceof AIUnavailableError
+      return {
+        id: question.id,
+        answered: true,
+        correct: false,
+        score: 0,
+        source: 'local-fallback',
+        feedback: isUnavailable
+          ? 'Connect AI to grade handwritten/drawn answers.'
+          : `Couldn't read that image clearly. Expected: ${question.correctAnswer}.`,
+        errorStep: null,
+      }
+    }
+  }
+
+  // ---- TEXT: Layer 1 always, Layer 2 when reachable ----
+  const local = checkLocally(studentAnswer, question.acceptedAnswers)
 
   // If Layer 1 already confirms a match, we can trust it — but still ask AI for
   // a one-line of feedback opportunistically. To keep grading snappy and robust

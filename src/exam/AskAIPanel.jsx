@@ -66,9 +66,11 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
     abortRef.current = controller
 
     // Include the student's current attempt as context (helps "check my approach").
-    const contextNote = studentAnswer
-      ? `\n\n(The student's current working/answer so far is: "${studentAnswer}")`
-      : ''
+    const contextNote = !studentAnswer
+      ? ''
+      : typeof studentAnswer === 'object'
+        ? '\n\n(The student has attached a handwritten/drawn answer image.)'
+        : `\n\n(The student's current working/answer so far is: "${studentAnswer}")`
 
     try {
       const reply = await callAnthropic({

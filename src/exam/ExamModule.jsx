@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EXAM_QUESTIONS, EXAM_META } from '../data/examQuestions.js'
-import { gradeQuestion } from '../lib/grading.js'
+import { gradeQuestion, isImageAnswer } from '../lib/grading.js'
 import { generateSimilar } from '../lib/generate.js'
+import AnswerInput from './AnswerInput.jsx'
+
+// An answer counts as filled if it's non-empty text or an image (drawn/photo).
+const answerFilled = (a) => a != null && (typeof a === 'object' ? !!a.image : String(a).trim() !== '')
 import { useReducedMotion } from '../lib/useReducedMotion.js'
 import MathText from '../components/MathText.jsx'
 import BrandLogo from '../components/BrandLogo.jsx'
@@ -53,7 +57,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
   const abortRef = useRef(null)
 
   const answeredCount = useMemo(
-    () => questions.filter((q) => (answers[q.id] ?? '').toString().trim() !== '').length,
+    () => questions.filter((q) => answerFilled(answers[q.id])).length,
     [answers, questions],
   )
 
@@ -391,27 +395,7 @@ function ActiveExam({
               })}
             </div>
           ) : (
-            <div style={{ marginTop: 22 }}>
-              <input
-                value={answers[q.id] ?? ''}
-                onChange={(e) => setAnswer(q.id, e.target.value)}
-                placeholder="Type your answer…  e.g.  x = 7,  3/4,  20cm²"
-                style={{
-                  width: '100%',
-                  padding: '15px 18px',
-                  borderRadius: 14,
-                  background: 'var(--input-bg)',
-                  border: '1px solid rgba(var(--fill-rgb),0.10)',
-                  color: t.INK,
-                  fontSize: 16,
-                  fontFamily: "'Space Grotesk',sans-serif",
-                  outline: 'none',
-                }}
-              />
-              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.4)', marginTop: 9 }}>
-                Equivalent forms are accepted — fractions, decimals, with or without units.
-              </div>
-            </div>
+            <AnswerInput key={q.id} t={t} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
           )}
 
           {/* footer controls */}
@@ -455,7 +439,7 @@ function ActiveExam({
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 9 }}>
               {questions.map((qq, i) => {
-                const isAnswered = (answers[qq.id] ?? '').toString().trim() !== ''
+                const isAnswered = answerFilled(answers[qq.id])
                 const isFlag = flagged[qq.id]
                 const isCur = i === current
                 return (
@@ -774,7 +758,8 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
   const color = ok ? t.OK : partial ? '#FFB347' : t.CORAL
   const marks = Number(q.marks) || 1
   const earned = Math.round(r.score * marks)
-  const given = (studentAnswer ?? '').toString().trim() || '—'
+  const imgAns = isImageAnswer(studentAnswer)
+  const given = imgAns ? '' : ((studentAnswer ?? '').toString().trim() || '—')
 
   return (
     <div style={{ ...t.GLASS, borderRadius: 20, padding: '20px 22px' }}>
@@ -810,8 +795,15 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
           </div>
 
           {/* answers */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-            <Tag label="Your answer" value={given} color={ok ? t.OK : t.CORAL} t={t} />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'flex-start' }}>
+            {imgAns ? (
+              <div style={{ padding: '9px 13px', borderRadius: 12, background: t.hexA(ok ? t.OK : t.CORAL, 0.1), border: `1px solid ${t.hexA(ok ? t.OK : t.CORAL, 0.3)}` }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)', marginBottom: 6 }}>Your answer · {studentAnswer.kind === 'photo' ? 'photo' : 'drawing'}</div>
+                <img src={`data:${studentAnswer.media_type};base64,${studentAnswer.image}`} alt="Your answer" style={{ maxWidth: 240, maxHeight: 130, borderRadius: 8, display: 'block' }} />
+              </div>
+            ) : (
+              <Tag label="Your answer" value={given} color={ok ? t.OK : t.CORAL} t={t} />
+            )}
             <Tag label="Correct answer" value={q.correctAnswer} color={t.OK} t={t} />
           </div>
 
