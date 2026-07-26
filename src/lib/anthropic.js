@@ -27,7 +27,10 @@ export function hasClientKey() {
 // Low-level call. Returns the concatenated text of the first content block(s).
 // `messages` is the Anthropic messages array; `system` is an optional system
 // prompt string.
-export async function callAnthropic({ system, messages, maxTokens = 1000, model = MODEL, signal }) {
+// Core request. Returns { text, stopReason, data }. `temperature` is included
+// only when a number is given (so extraction/grading can pin it to 0 for
+// consistency while generation stays creative at the API default).
+export async function requestAnthropic({ system, messages, maxTokens = 1000, model = MODEL, temperature, signal }) {
   const direct = !!CLIENT_KEY
   const url = direct ? ANTHROPIC_DIRECT : ANTHROPIC_ENDPOINT
   const headers = { 'Content-Type': 'application/json' }
@@ -46,6 +49,7 @@ export async function callAnthropic({ system, messages, maxTokens = 1000, model 
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
+        ...(typeof temperature === 'number' ? { temperature } : {}),
         ...(system ? { system } : {}),
         messages,
       }),
@@ -70,7 +74,11 @@ export async function callAnthropic({ system, messages, maxTokens = 1000, model 
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
     .join('')
-  return text
+  return { text, stopReason: data.stop_reason, data }
+}
+
+export async function callAnthropic(opts) {
+  return (await requestAnthropic(opts)).text
 }
 
 // Streaming-friendly typewriter helper: we don't use SSE here (keeps the proxy

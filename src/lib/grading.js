@@ -146,6 +146,7 @@ async function gradeTextWithAI(question, studentAnswer, local, signal) {
     system: GRADER_SYSTEM,
     messages: [{ role: 'user', content: user }],
     maxTokens: 1000,
+    temperature: 0,
     model: MODEL,
     signal,
   })
@@ -177,6 +178,7 @@ async function gradeImageWithAI(question, img, signal) {
       { type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image } },
     ] }],
     maxTokens: 1000,
+    temperature: 0,
     model: MODEL,
     signal,
   })

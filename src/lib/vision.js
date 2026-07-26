@@ -1,4 +1,4 @@
-import { callAnthropic } from './anthropic.js'
+import { requestAnthropic } from './anthropic.js'
 import { MODEL } from './config.js'
 
 // Downscale an image File to a JPEG base64 payload for the Anthropic vision API.
@@ -61,8 +61,12 @@ const PROMPT =
   '  } ]\n' +
   '}\n' +
   'Use answers shown on the paper if present; otherwise work them out yourself. ' +
-  'Capture every question across every page. Keep mathematical notation as ' +
-  'readable plain text (e.g. x^2, 3/4). Output JSON only.'
+  'Capture every question across every page. ' +
+  'SEGMENTATION RULE: treat each top-level numbered question as exactly ONE item. ' +
+  'Keep its parts (a), (b), (c) together inside that one question\'s prompt, and sum ' +
+  'their marks into that item\'s "marks". Do NOT split parts into separate questions, ' +
+  'and do NOT merge separate numbered questions. Be exhaustive and consistent. ' +
+  'Keep mathematical notation as readable plain text (e.g. x^2, 3/4). Output JSON only.'
 
 function parseObjectJSON(text) {
   if (!text) throw new Error('empty')
@@ -151,13 +155,15 @@ export async function scanPaper(files, subject, signal) {
     }
   }
 
-  const text = await callAnthropic({
+  const { text, stopReason } = await requestAnthropic({
     system: SYSTEM,
     messages: [{ role: 'user', content: [...blocks, { type: 'text', text: PROMPT }] }],
-    maxTokens: 8192,
+    maxTokens: 16000, // long papers need room; avoids mid-list truncation
+    temperature: 0, // deterministic segmentation → consistent question count/marks
     model: MODEL,
     signal,
   })
+  const truncated = stopReason === 'max_tokens'
 
   // Strict parse first; if the model's JSON is truncated/malformed (long papers),
   // fall back to a tolerant salvage that recovers every complete question.
@@ -180,5 +186,6 @@ export async function scanPaper(files, subject, signal) {
     durationMin: Number(obj.durationMin) > 0 ? Math.round(Number(obj.durationMin)) : null,
     questions,
     pages: list.length,
+    truncated,
   }
 }
