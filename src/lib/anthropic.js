@@ -40,38 +40,51 @@ export async function requestAnthropic({ system, messages, maxTokens = 1000, mod
     headers['anthropic-dangerous-direct-browser-access'] = 'true'
   }
 
-  let res
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers,
-      signal,
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        ...(typeof temperature === 'number' ? { temperature } : {}),
-        ...(system ? { system } : {}),
-        messages,
-      }),
-    })
-  } catch (err) {
-    throw new AIUnavailableError('Network error reaching the AI service.', err)
+  const doFetch = async (withTemp) => {
+    try {
+      return await fetch(url, {
+        method: 'POST',
+        headers,
+        signal,
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          ...(withTemp && typeof temperature === 'number' ? { temperature } : {}),
+          ...(system ? { system } : {}),
+          messages,
+        }),
+      })
+    } catch (err) {
+      throw new AIUnavailableError('Network error reaching the AI service.', err)
+    }
   }
 
-  if (!res.ok) {
-    let detail = ''
+  const errDetail = async (res) => {
     try {
       const j = await res.json()
       // Anthropic error shape: { type: 'error', error: { type, message } }
-      detail =
+      return (
         (j.error && typeof j.error === 'object' && j.error.message) ||
         (typeof j.error === 'string' ? j.error : '') ||
         j.message ||
         ''
+      )
     } catch {
-      /* ignore */
+      return ''
     }
-    throw new AIUnavailableError(detail ? `${detail} (HTTP ${res.status})` : `AI service returned ${res.status}.`)
+  }
+
+  let res = await doFetch(true)
+  if (!res.ok) {
+    let detail = await errDetail(res)
+    // Newer models reject the temperature parameter — retry once without it.
+    if (res.status === 400 && typeof temperature === 'number' && /temperature/i.test(detail)) {
+      res = await doFetch(false)
+      if (!res.ok) detail = await errDetail(res)
+    }
+    if (!res.ok) {
+      throw new AIUnavailableError(detail ? `${detail} (HTTP ${res.status})` : `AI service returned ${res.status}.`)
+    }
   }
 
   const data = await res.json()
