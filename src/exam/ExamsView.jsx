@@ -35,6 +35,7 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           questions={practice.questions}
           meta={practice.meta}
           onGeneratePractice={launchPractice}
+          onGraded={store.saveAttempt}
         />
       </div>
     )
@@ -54,6 +55,7 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           questions={questions}
           meta={examMeta(active)}
           onGeneratePractice={launchPractice}
+          onGraded={store.saveAttempt}
         />
       </div>
     )

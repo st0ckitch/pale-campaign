@@ -41,11 +41,35 @@ function fmtTime(s) {
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
-export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, onGeneratePractice }) {
+// Small JPEG thumbnail of a drawn/photographed answer for the teacher's queue.
+async function answerThumb(ans) {
+  if (typeof document === 'undefined' || !ans || typeof ans !== 'object' || !ans.image) return null
+  try {
+    return await new Promise((res) => {
+      const im = new Image()
+      im.onload = () => {
+        const sc = Math.min(1, 320 / Math.max(im.width, im.height))
+        const c = document.createElement('canvas')
+        c.width = Math.max(1, Math.round(im.width * sc))
+        c.height = Math.max(1, Math.round(im.height * sc))
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height)
+        const out = c.toDataURL('image/jpeg', 0.6)
+        res(out.length < 80000 ? out : null)
+      }
+      im.onerror = () => res(null)
+      im.src = `data:${ans.media_type || 'image/jpeg'};base64,${ans.image}`
+    })
+  } catch {
+    return null
+  }
+}
+
+export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, onGeneratePractice, onGraded }) {
   const reduceMotion = useReducedMotion()
   const total = questions.length
   const totalMkAll = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
   const [genBusy, setGenBusy] = useState(false)
+  const [studentName, setStudentName] = useState('')
 
   const [phase, setPhase] = useState('intro') // intro | active | grading | review
   const [answers, setAnswers] = useState({})
@@ -104,6 +128,45 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
       ])
       setResults(res)
       setPhase('review')
+      // Record the attempt for teacher moderation + class insights (best effort).
+      try {
+        const items = await Promise.all(questions.map(async (q, i) => {
+          const r = res[i]
+          const raw = answers[q.id]
+          const isImg = raw && typeof raw === 'object' && raw.image
+          return {
+            prompt: q.prompt,
+            topic: q.topic || meta.subject || 'General',
+            type: q.type,
+            marks: Number(q.marks) || 1,
+            correctAnswer: q.correctAnswer,
+            answer: isImg ? (raw.kind === 'photo' ? '[photographed answer]' : '[drawn answer]') : String(raw ?? ''),
+            thumb: isImg ? await answerThumb(raw) : null,
+            answered: r.answered,
+            score: r.score,
+            correct: r.correct,
+            feedback: r.feedback,
+            errorStep: r.errorStep ?? null,
+            confidence: r.confidence ?? null,
+            source: r.source,
+            needsReview: !!r.needsReview,
+          }
+        }))
+        const totalMarks = items.reduce((s, it) => s + it.marks, 0)
+        const earnedMarks = Math.round(items.reduce((s, it) => s + it.score * it.marks, 0) * 10) / 10
+        onGraded?.({
+          id: 'a' + Math.random().toString(36).slice(2, 9),
+          ts: Date.now(),
+          examTitle: meta.title,
+          subject: meta.subject || 'General',
+          student: studentName.trim() || 'Anonymous',
+          totalMarks,
+          earnedMarks,
+          items,
+        })
+      } catch (err) {
+        console.error('Could not record attempt:', err)
+      }
     } catch {
       // gradeQuestion never throws, but guard anyway
       setPhase('active')
@@ -159,7 +222,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 
   return (
     <div style={{ animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
-      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} />}
+      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} studentName={studentName} onName={setStudentName} />}
 
       {phase === 'active' && (
         <ActiveExam
@@ -217,7 +280,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 // ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
-function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta }) {
+function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta, studentName, onName }) {
   const mins = Math.floor(meta.durationSeconds / 60)
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
@@ -261,7 +324,16 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta }
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 14, marginTop: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ marginTop: 22, maxWidth: 320 }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)', marginBottom: 8 }}>Your name</div>
+        <input
+          value={studentName}
+          onChange={(e) => onName(e.target.value)}
+          placeholder="So your teacher knows whose work this is"
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid rgba(var(--fill-rgb),0.12)', color: 'var(--ink)', fontSize: 14, fontFamily: "'Manrope',sans-serif", outline: 'none' }}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
         <button style={t.cta} onClick={onStart}>
           Start exam
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -813,6 +885,11 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
             {r.feedback}
             {r.errorStep ? <span style={{ color: t.CORAL }}> — {r.errorStep}</span> : null}
             <SourceTag source={r.source} t={t} />
+            {r.needsReview && (
+              <span style={{ marginLeft: 8, fontSize: 10, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, background: 'rgba(255,179,71,0.12)', border: '1px solid rgba(255,179,71,0.4)', color: '#FFB347', whiteSpace: 'nowrap' }}>
+                Teacher will review
+              </span>
+            )}
           </div>
 
           {/* actions */}

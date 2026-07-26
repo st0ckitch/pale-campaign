@@ -124,6 +124,7 @@ export function parseGraderJSON(text) {
     score: typeof obj.score === 'number' ? Math.max(0, Math.min(1, obj.score)) : obj.correct ? 1 : 0,
     feedback: typeof obj.feedback === 'string' ? obj.feedback : '',
     errorStep: obj.errorStep == null || obj.errorStep === 'null' ? null : String(obj.errorStep),
+    confidence: typeof obj.confidence === 'number' ? Math.max(0, Math.min(1, obj.confidence)) : null,
   }
 }
 
@@ -140,7 +141,8 @@ async function gradeTextWithAI(question, studentAnswer, local, signal) {
     `Student's answer: ${studentAnswer}\n\n` +
     'Return ONLY this JSON: ' +
     '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
-    '"feedback": "one sentence", "errorStep": "where they went wrong or null" }'
+    '"feedback": "one sentence", "errorStep": "where they went wrong or null", ' +
+    '"confidence": how certain you are in this judgement, 0-1 }'
 
   const text = await callAnthropic({
     system: GRADER_SYSTEM,
@@ -170,7 +172,8 @@ async function gradeImageWithAI(question, img, signal) {
     "The image is the student's handwritten/drawn answer and working. Read it carefully and grade it.\n" +
     'Return ONLY this JSON: ' +
     '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
-    '"feedback": "one sentence", "errorStep": "where they went wrong or null" }'
+    '"feedback": "one sentence", "errorStep": "where they went wrong or null", ' +
+    '"confidence": how certain you are in this judgement (lower if the handwriting is hard to read), 0-1 }'
   const text = await callAnthropic({
     system: GRADER_SYSTEM,
     messages: [{ role: 'user', content: [
@@ -187,6 +190,16 @@ async function gradeImageWithAI(question, img, signal) {
 
 // ===========================================================================
 // Public: grade one question (handles MCQ + text/image, both layers, fallbacks)
+// Should a human check this AI judgement? Low confidence, partial credit, or
+// an offline fallback on a written answer all warrant a teacher's eye.
+function reviewFlag(res) {
+  if (res.source === 'local-fallback') return !res.correct
+  if (res.source !== 'ai') return false
+  const lowConf = res.confidence !== null && res.confidence < 0.8
+  const partial = res.score > 0 && res.score < 1
+  return lowConf || partial
+}
+
 // ===========================================================================
 export async function gradeQuestion(question, studentAnswer, signal) {
   const answered = studentAnswer != null && (isImageAnswer(studentAnswer) ? true : String(studentAnswer).trim() !== '')
@@ -206,6 +219,8 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           ? 'Correct.'
           : `Not quite — the correct option is "${question.correctAnswer}".`,
       errorStep: null,
+      confidence: 1,
+      needsReview: false,
     }
   }
 
@@ -218,6 +233,8 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       source: 'local',
       feedback: 'No answer entered.',
       errorStep: null,
+      confidence: 1,
+      needsReview: false,
     }
   }
 
@@ -225,7 +242,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
   if (isImageAnswer(studentAnswer)) {
     try {
       const ai = await gradeImageWithAI(question, studentAnswer, signal)
-      return {
+      const out = {
         id: question.id,
         answered: true,
         correct: ai.correct || ai.equivalent,
@@ -233,7 +250,9 @@ export async function gradeQuestion(question, studentAnswer, signal) {
         source: 'ai',
         feedback: ai.feedback || (ai.correct ? 'Correct.' : 'Not quite.'),
         errorStep: ai.errorStep,
+        confidence: ai.confidence,
       }
+      return { ...out, needsReview: reviewFlag(out) }
     } catch (err) {
       const isUnavailable = err instanceof AIUnavailableError
       return {
@@ -246,6 +265,8 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           ? 'Connect AI to grade handwritten/drawn answers.'
           : `Couldn't read that image clearly. Expected: ${question.correctAnswer}.`,
         errorStep: null,
+        confidence: null,
+        needsReview: true,
       }
     }
   }
@@ -265,12 +286,14 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       source: 'local',
       feedback: 'Correct — equivalent to the expected answer.',
       errorStep: null,
+      confidence: 1,
+      needsReview: false,
     }
   }
 
   try {
     const ai = await gradeTextWithAI(question, studentAnswer, local, signal)
-    return {
+    const out = {
       id: question.id,
       answered: true,
       correct: ai.correct || ai.equivalent,
@@ -278,7 +301,9 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       source: 'ai',
       feedback: ai.feedback || (ai.correct ? 'Correct.' : 'Not quite.'),
       errorStep: ai.errorStep,
+      confidence: ai.confidence,
     }
+    return { ...out, needsReview: reviewFlag(out) }
   } catch (err) {
     // Fall back to Layer 1 result on any AI/parse failure.
     const isUnavailable = err instanceof AIUnavailableError
@@ -294,6 +319,8 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           ? `Marked using offline checking (AI unavailable). Expected: ${question.correctAnswer}.`
           : `Not quite. Expected: ${question.correctAnswer}.`,
       errorStep: null,
+      confidence: null,
+      needsReview: !local.correct,
     }
   }
 }

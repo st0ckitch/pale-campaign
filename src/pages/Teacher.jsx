@@ -3,6 +3,7 @@ import { sub, fill } from '../theme.js'
 import { QUESTION_BANK, resolveQuestions } from '../lib/useContentStore.js'
 import { scanPaper } from '../lib/vision.js'
 import QuestionEditor from './QuestionEditor.jsx'
+import TeacherInsights from './TeacherInsights.jsx'
 
 const rid = (p) => p + Math.random().toString(36).slice(2, 9)
 const SUBJECT_SUGGESTIONS = [
@@ -219,6 +220,8 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
           <span style={{ fontSize: 12.5, color: sub(0.5) }}>{customQs.length} question{customQs.length === 1 ? '' : 's'} · {totalMarks} mark{totalMarks === 1 ? '' : 's'} · {subject || 'General'}</span>
         </div>
       </section>
+
+      <TeacherInsights t={t} store={store} toast={toast} aiOn={aiOn} onConnect={onConnect} />
 
       <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* ANNOUNCEMENT */}

@@ -27,12 +27,12 @@ function load() {
     const raw = window.localStorage.getItem(KEY)
     if (raw) {
       const p = JSON.parse(raw)
-      return { customExams: p.customExams || [], announcements: p.announcements || [] }
+      return { customExams: p.customExams || [], announcements: p.announcements || [], attempts: p.attempts || [] }
     }
   } catch {
     /* ignore */
   }
-  return { customExams: [], announcements: [] }
+  return { customExams: [], announcements: [], attempts: [] }
 }
 
 export function useContentStore() {
@@ -53,6 +53,22 @@ export function useContentStore() {
     setData((d) => ({ ...d, customExams: d.customExams.map((e) => (e.id === id ? { ...e, ...patch } : e)) }))
   const deleteExam = (id) =>
     setData((d) => ({ ...d, customExams: d.customExams.filter((e) => e.id !== id) }))
+  // Attempts: every submitted exam is recorded so the teacher can moderate AI
+  // marking and get class-level error insights. Capped to keep localStorage sane.
+  const saveAttempt = (attempt) =>
+    setData((d) => ({ ...d, attempts: [attempt, ...(d.attempts || [])].slice(0, 40) }))
+  const updateAttemptItem = (attemptId, index, patch) =>
+    setData((d) => ({
+      ...d,
+      attempts: (d.attempts || []).map((a) => {
+        if (a.id !== attemptId) return a
+        const items = a.items.map((it, i) => (i === index ? { ...it, ...patch } : it))
+        const earnedMarks = items.reduce((s, it) => s + (Number(it.score) || 0) * (Number(it.marks) || 1), 0)
+        return { ...a, items, earnedMarks: Math.round(earnedMarks * 10) / 10 }
+      }),
+    }))
+  const clearAttempts = () => setData((d) => ({ ...d, attempts: [] }))
+
   const addAnnouncement = (a) =>
     setData((d) => ({ ...d, announcements: [{ ...a, id: rid('a'), date: Date.now() }, ...d.announcements] }))
   const deleteAnnouncement = (id) =>
@@ -67,6 +83,10 @@ export function useContentStore() {
     deleteExam,
     addAnnouncement,
     deleteAnnouncement,
+    attempts: data.attempts || [],
+    saveAttempt,
+    updateAttemptItem,
+    clearAttempts,
   }
 }
 
