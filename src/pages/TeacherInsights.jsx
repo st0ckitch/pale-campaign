@@ -41,7 +41,7 @@ export default function TeacherInsights({ t, store, toast, aiOn, onConnect }) {
       setReport(rep)
     } catch (err) {
       console.error('Insights failed:', err)
-      toast('Analysis failed — check the AI connection')
+      toast(`Analysis failed: ${err?.message || 'check the AI connection'}`)
     } finally {
       setBusy(false)
     }

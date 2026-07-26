@@ -62,11 +62,16 @@ export async function requestAnthropic({ system, messages, maxTokens = 1000, mod
     let detail = ''
     try {
       const j = await res.json()
-      detail = j.message || j.error || ''
+      // Anthropic error shape: { type: 'error', error: { type, message } }
+      detail =
+        (j.error && typeof j.error === 'object' && j.error.message) ||
+        (typeof j.error === 'string' ? j.error : '') ||
+        j.message ||
+        ''
     } catch {
       /* ignore */
     }
-    throw new AIUnavailableError(detail || `AI service returned ${res.status}.`)
+    throw new AIUnavailableError(detail ? `${detail} (HTTP ${res.status})` : `AI service returned ${res.status}.`)
   }
 
   const data = await res.json()

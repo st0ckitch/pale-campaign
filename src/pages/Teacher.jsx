@@ -76,7 +76,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
       if (res.truncated) toast('Heads up: the paper was long and may have been cut off — check the last questions are all there')
     } catch (err) {
       console.error('Scan failed:', err)
-      toast('Could not read that — check AI is connected, then try again')
+      toast(`Scan failed: ${err?.message || 'check AI is connected, then try again'}`)
     } finally {
       setScanning(false)
     }

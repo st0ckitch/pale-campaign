@@ -211,7 +211,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
       onGeneratePractice?.(qs, pmeta)
     } catch (err) {
       console.error('Practice generation failed:', err)
-      toast('Generation failed — check the AI connection')
+      toast(`Generation failed: ${err?.message || 'check the AI connection'}`)
     } finally {
       setGenBusy(false)
     }
