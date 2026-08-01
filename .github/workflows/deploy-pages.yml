@@ -32,6 +32,15 @@ jobs:
       - name: Set base path
         run: echo "VITE_BASE=/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
 
+      # Optional: point the Pages build at a deployed backend (Supabase Edge
+      # Function or Node server). Set the repository variable VITE_API_BASE
+      # (Settings → Secrets and variables → Actions → Variables), e.g.
+      #   https://<project-ref>.supabase.co/functions/v1
+      # When unset the app runs in local single-browser mode as before.
+      - name: Point the build at the backend (optional)
+        if: ${{ vars.VITE_API_BASE != '' }}
+        run: echo "VITE_API_BASE=${{ vars.VITE_API_BASE }}" >> "$GITHUB_ENV"
+
       - run: npm run build
 
       # enablement:true turns Pages on for the repo automatically (no manual step).

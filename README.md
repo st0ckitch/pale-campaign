@@ -71,7 +71,36 @@ src/
     AskAIPanel.jsx        question-scoped tutor (integrity-aware)
 ```
 
-## School server (cloud mode)
+## Hosting on Vercel + Supabase (recommended)
+
+The repo is set up for a zero-server-management deployment:
+
+- **Vercel** builds and serves the app on every push to `main` (auto-detected
+  Vite project — no config needed).
+- **Supabase** runs the backend: the Edge Function in
+  `supabase/functions/api/index.ts` (same API as the Node server below) with
+  the project's Postgres as storage and the Anthropic key in Supabase secrets.
+
+One-time Supabase setup (all in the dashboard):
+
+1. **SQL Editor** → paste the whole of `supabase/schema.sql` → **Run**.
+2. **Edge Functions → Secrets** → add `ANTHROPIC_API_KEY` and `TEACHER_KEY`
+   (optionally `TEACHER_KEY_BGA` / `TEACHER_KEY_BIST` for separate keys).
+3. **Edge Functions → Deploy a new function** → name it exactly `api`, paste
+   the contents of `supabase/functions/api/index.ts`, deploy — then open the
+   function's **Details** and turn **Verify JWT off** (the app has its own
+   auth: teacher tokens + class codes).
+   *(CLI alternative: `npx supabase link && npx supabase functions deploy api`.)*
+4. Copy the base URL `https://<project-ref>.supabase.co/functions/v1` and set
+   it as the `VITE_API_BASE` environment variable in Vercel
+   (Project → Settings → Environment Variables), then redeploy.
+   For GitHub Pages, set the same value as a repository **variable** named
+   `VITE_API_BASE` (Settings → Secrets and variables → Actions → Variables).
+
+Quick check: `https://<project-ref>.supabase.co/functions/v1/api/health`
+should return `{"ok":true,...,"ai":true}`.
+
+## School server (self-hosted Node alternative)
 
 Static hosting keeps everything in one browser. The optional backend in
 `server/index.mjs` (zero dependencies, Node 18+) turns the app into a real

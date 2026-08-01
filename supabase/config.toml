@@ -1,0 +1,11 @@
+# Supabase CLI config — only needed if you deploy from the command line:
+#   npx supabase login
+#   npx supabase link --project-ref <your-project-ref>
+#   npx supabase functions deploy api
+#   npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... TEACHER_KEY=choose-a-secret
+project_id = "pale-campaign"
+
+# The app does its own auth (teacher bearer tokens + class join codes), so the
+# function must be publicly callable.
+[functions.api]
+verify_jwt = false
