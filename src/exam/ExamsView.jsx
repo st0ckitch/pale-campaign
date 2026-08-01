@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { sub, fill } from '../theme.js'
-import { resolveQuestions, examMeta } from '../lib/useContentStore.js'
+import { resolveQuestions, examMeta, practiceMeta } from '../lib/useContentStore.js'
 import ExamModule from './ExamModule.jsx'
 
 // Lists every available exam (the built-in mock + anything a teacher added) and
 // launches the chosen one through the shared, data-driven ExamModule.
 export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMotion, onGo }) {
   const [activeId, setActiveId] = useState(null)
-  const [practice, setPractice] = useState(null) // AI-generated set: { questions, meta, key }
+  const [practice, setPractice] = useState(null) // AI practice set being sat: { id, questions, meta }
   const active = store.exams.find((e) => e.id === activeId)
 
   const backBtn = (onClick, label) => (
@@ -19,7 +19,21 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
     </button>
   )
 
-  const launchPractice = (qs, m) => setPractice({ questions: qs, meta: m, key: 'p' + Math.random().toString(36).slice(2, 8) })
+  // A freshly generated set is saved to the store first, so it survives a
+  // reload and can be re-sat from the "Your practice sets" list below.
+  const launchPractice = (qs, m) => {
+    const id = store.addPracticeSet({
+      title: m.title,
+      subject: m.subject,
+      description: m.description || '',
+      durationMin: Math.max(1, Math.round((m.durationSeconds || 600) / 60)),
+      passMark: m.passMark ?? 50,
+      questions: qs,
+    })
+    setPractice({ id, questions: qs, meta: m })
+  }
+
+  const openPractice = (p) => setPractice({ id: p.id, questions: p.questions || [], meta: practiceMeta(p) })
 
   // A generated practice set takes precedence over the exam it came from.
   if (practice) {
@@ -27,13 +41,14 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {backBtn(() => { setPractice(null); setActiveId(null) }, '‹ Back to exams')}
         <ExamModule
-          key={practice.key}
+          key={practice.id}
           theme={t}
           toast={toast}
           aiOn={aiOn}
           onConnect={onConnect}
           questions={practice.questions}
           meta={practice.meta}
+          examId={practice.id}
           onGeneratePractice={launchPractice}
           onGraded={store.saveAttempt}
         />
@@ -54,6 +69,7 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           onConnect={onConnect}
           questions={questions}
           meta={examMeta(active)}
+          examId={active.id}
           onGeneratePractice={launchPractice}
           onGraded={store.saveAttempt}
         />
@@ -106,6 +122,54 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           )
         })}
       </div>
+
+      {store.practiceSets.length > 0 && (
+        <>
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Your practice sets</div>
+            <div style={{ fontSize: 12.5, color: sub(0.55), marginTop: 3 }}>AI-generated sets you've created — saved so you can sit them again.</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {store.practiceSets.map((p) => {
+              const qn = (p.questions || []).length
+              const marks = (p.questions || []).reduce((s, q) => s + (Number(q.marks) || 1), 0)
+              return (
+                <div key={p.id} style={{ ...t.GLASS, borderRadius: 20, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '4px 11px', borderRadius: 999, background: t.hexA(t.accent2 || t.accent, 0.14), border: `1px solid ${t.hexA(t.accent2 || t.accent, 0.32)}`, color: t.accent }}>
+                      AI practice
+                    </span>
+                    <span style={{ fontSize: 12, color: sub(0.5) }}>{p.subject}</span>
+                  </div>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, lineHeight: 1.3 }}>{p.title}</div>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 12.5, color: sub(0.6) }}>
+                    <span>{qn} question{qn === 1 ? '' : 's'}</span>
+                    <span>·</span>
+                    <span>{marks} mark{marks === 1 ? '' : 's'}</span>
+                    <span>·</span>
+                    <span>{p.durationMin} min</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+                    <button
+                      disabled={qn === 0}
+                      style={{ ...t.cta, flex: 1, justifyContent: 'center', opacity: qn === 0 ? 0.5 : 1 }}
+                      onClick={() => qn > 0 && openPractice(p)}
+                    >
+                      Practise →
+                    </button>
+                    <button
+                      onClick={() => { store.deletePracticeSet(p.id); toast('Practice set removed') }}
+                      style={{ ...t.ghostBtn, color: t.CORAL, borderColor: t.hexA(t.CORAL, 0.4) }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

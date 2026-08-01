@@ -22,17 +22,22 @@ function builtinExam() {
 }
 
 function load() {
-  if (typeof window === 'undefined') return { customExams: [], announcements: [] }
+  if (typeof window === 'undefined') return { customExams: [], announcements: [], attempts: [], practiceSets: [] }
   try {
     const raw = window.localStorage.getItem(KEY)
     if (raw) {
       const p = JSON.parse(raw)
-      return { customExams: p.customExams || [], announcements: p.announcements || [], attempts: p.attempts || [] }
+      return {
+        customExams: p.customExams || [],
+        announcements: p.announcements || [],
+        attempts: p.attempts || [],
+        practiceSets: p.practiceSets || [],
+      }
     }
   } catch {
     /* ignore */
   }
-  return { customExams: [], announcements: [], attempts: [] }
+  return { customExams: [], announcements: [], attempts: [], practiceSets: [] }
 }
 
 export function useContentStore() {
@@ -74,6 +79,19 @@ export function useContentStore() {
   const deleteAnnouncement = (id) =>
     setData((d) => ({ ...d, announcements: d.announcements.filter((a) => a.id !== id) }))
 
+  // AI practice sets: persisted so a generated set survives reload and can be
+  // re-sat later. Capped to keep localStorage quota sane.
+  const addPracticeSet = (set) => {
+    const id = rid('p')
+    setData((d) => ({
+      ...d,
+      practiceSets: [{ ...set, id, createdAt: Date.now() }, ...(d.practiceSets || [])].slice(0, 12),
+    }))
+    return id
+  }
+  const deletePracticeSet = (id) =>
+    setData((d) => ({ ...d, practiceSets: (d.practiceSets || []).filter((p) => p.id !== id) }))
+
   return {
     exams: [builtinExam(), ...data.customExams],
     customExams: data.customExams,
@@ -87,6 +105,21 @@ export function useContentStore() {
     saveAttempt,
     updateAttemptItem,
     clearAttempts,
+    practiceSets: data.practiceSets || [],
+    addPracticeSet,
+    deletePracticeSet,
+  }
+}
+
+// Resolve a stored practice set into the meta shape ExamModule expects.
+export function practiceMeta(p) {
+  return {
+    title: p.title,
+    subject: p.subject,
+    subtitle: 'AI practice set',
+    description: p.description || 'Fresh AI-generated questions, similar in style to your exam.',
+    durationSeconds: (Number(p.durationMin) || 10) * 60,
+    passMark: Number(p.passMark) >= 0 ? Number(p.passMark) : 50,
   }
 }
 

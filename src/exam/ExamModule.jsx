@@ -41,6 +41,43 @@ function fmtTime(s) {
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Format marks: whole numbers stay whole, partial credit shows one decimal
+// (keeps the per-question cards and the total ring arithmetically consistent).
+function fmtMarks(n) {
+  const r = Math.round(n * 10) / 10
+  return Number.isInteger(r) ? String(r) : r.toFixed(1)
+}
+
+// ---------------------------------------------------------------------------
+// In-progress attempt persistence. The active exam autosaves to localStorage
+// (keyed per exam) so a refresh or tab crash neither wipes the answers nor —
+// because the timer is anchored to a wall-clock deadline — grants extra time.
+// ---------------------------------------------------------------------------
+const progressKey = (examId) => `lh_exam_progress_${examId}`
+
+function readProgress(examId, qsig) {
+  if (typeof window === 'undefined' || !examId) return null
+  try {
+    const raw = window.localStorage.getItem(progressKey(examId))
+    if (!raw) return null
+    const p = JSON.parse(raw)
+    // Discard if the exam's questions changed since the attempt started.
+    if (p.qsig !== qsig || !Number.isFinite(p.deadlineAt)) return null
+    return p
+  } catch {
+    return null
+  }
+}
+
+function clearProgressStorage(examId) {
+  if (typeof window === 'undefined' || !examId) return
+  try {
+    window.localStorage.removeItem(progressKey(examId))
+  } catch {
+    /* ignore */
+  }
+}
+
 // Small JPEG thumbnail of a drawn/photographed answer for the teacher's queue.
 async function answerThumb(ans) {
   if (typeof document === 'undefined' || !ans || typeof ans !== 'object' || !ans.image) return null
@@ -64,7 +101,7 @@ async function answerThumb(ans) {
   }
 }
 
-export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, onGeneratePractice, onGraded }) {
+export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, examId = 'builtin-mock', onGeneratePractice, onGraded }) {
   const reduceMotion = useReducedMotion()
   const total = questions.length
   const totalMkAll = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
@@ -76,35 +113,62 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
   const [flagged, setFlagged] = useState({})
   const [current, setCurrent] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(meta.durationSeconds)
+  const [deadlineAt, setDeadlineAt] = useState(null) // wall-clock end of the attempt
+  const [saveState, setSaveState] = useState('idle') // idle | saved | error
+  const [resumeData, setResumeData] = useState(null) // unfinished attempt found in storage
   const [results, setResults] = useState(null)
   const [askFor, setAskFor] = useState(null) // question being discussed
   const abortRef = useRef(null)
+
+  const qsig = useMemo(() => questions.map((q) => q.id).join('|'), [questions])
 
   const answeredCount = useMemo(
     () => questions.filter((q) => answerFilled(answers[q.id])).length,
     [answers, questions],
   )
 
-  // ---- timer ----
+  // Look for an unfinished attempt to offer resuming.
   useEffect(() => {
-    if (phase !== 'active') return
-    const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(id)
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
+    const saved = readProgress(examId, qsig)
+    if (saved) {
+      setResumeData(saved)
+      if (saved.studentName) setStudentName(saved.studentName)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ---- timer: derived from the wall-clock deadline, so a refresh neither
+  // resets it nor grants extra time ----
+  useEffect(() => {
+    if (phase !== 'active' || !deadlineAt) return
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000)))
+    tick()
+    const id = setInterval(tick, 500)
     return () => clearInterval(id)
-  }, [phase])
+  }, [phase, deadlineAt])
 
   // auto-submit when time runs out
   useEffect(() => {
     if (phase === 'active' && secondsLeft === 0) submit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, phase])
+
+  // ---- autosave the in-progress attempt (debounced) ----
+  useEffect(() => {
+    if (phase !== 'active' || typeof window === 'undefined' || !examId || !deadlineAt) return
+    const id = setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          progressKey(examId),
+          JSON.stringify({ v: 1, qsig, answers, flagged, current, studentName, deadlineAt, savedAt: Date.now() }),
+        )
+        setSaveState('saved')
+      } catch {
+        setSaveState('error') // quota exceeded / privacy mode — say so instead of pretending
+      }
+    }, 350)
+    return () => clearTimeout(id)
+  }, [phase, examId, qsig, answers, flagged, current, studentName, deadlineAt])
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -113,6 +177,22 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
   }
   function toggleFlag(id) {
     setFlagged((f) => ({ ...f, [id]: !f[id] }))
+  }
+
+  function begin() {
+    clearProgressStorage(examId)
+    setResumeData(null)
+    setDeadlineAt(Date.now() + meta.durationSeconds * 1000)
+    setPhase('active')
+  }
+
+  function resumeAttempt() {
+    if (!resumeData) return
+    setAnswers(resumeData.answers || {})
+    setFlagged(resumeData.flagged || {})
+    setCurrent(Math.max(0, Math.min(total - 1, Number(resumeData.current) || 0)))
+    setDeadlineAt(resumeData.deadlineAt) // remaining time picks up where it left off
+    setPhase('active')
   }
 
   async function submit() {
@@ -128,6 +208,8 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
       ])
       setResults(res)
       setPhase('review')
+      clearProgressStorage(examId) // the attempt is submitted — nothing left to resume
+      setResumeData(null)
       // Record the attempt for teacher moderation + class insights (best effort).
       try {
         const items = await Promise.all(questions.map(async (q, i) => {
@@ -174,11 +256,14 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
   }
 
   function restart() {
+    clearProgressStorage(examId)
+    setResumeData(null)
     setAnswers({})
     setFlagged({})
     setResults(null)
     setCurrent(0)
     setSecondsLeft(meta.durationSeconds)
+    setDeadlineAt(Date.now() + meta.durationSeconds * 1000)
     setPhase('active')
   }
 
@@ -222,7 +307,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 
   return (
     <div style={{ animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
-      {phase === 'intro' && <Intro t={t} onStart={() => setPhase('active')} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} studentName={studentName} onName={setStudentName} />}
+      {phase === 'intro' && <Intro t={t} onStart={begin} resume={resumeData} onResume={resumeAttempt} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} studentName={studentName} onName={setStudentName} />}
 
       {phase === 'active' && (
         <ActiveExam
@@ -241,6 +326,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
           lowTime={lowTime}
           onSubmit={submit}
           onAsk={() => setAskFor(q)}
+          saveState={saveState}
         />
       )}
 
@@ -280,8 +366,9 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 // ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
-function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta, studentName, onName }) {
+function Intro({ t, onStart, resume, onResume, reduceMotion, aiOn, onConnect, total, marks, meta, studentName, onName }) {
   const mins = Math.floor(meta.durationSeconds / 60)
+  const remaining = resume ? Math.max(0, Math.ceil((resume.deadlineAt - Date.now()) / 1000)) : 0
   return (
     <div style={{ ...t.GLASS, borderRadius: 24, padding: '40px 42px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ marginBottom: 18 }}>
@@ -333,12 +420,29 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta, 
           style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid rgba(var(--fill-rgb),0.12)', color: 'var(--ink)', fontSize: 14, fontFamily: "'Manrope',sans-serif", outline: 'none' }}
         />
       </div>
+      {resume && (
+        <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 14, background: t.hexA(t.accent, 0.08), border: `1px solid ${t.hexA(t.accent, 0.35)}`, maxWidth: 560 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700 }}>Unfinished attempt found</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.6)', marginTop: 3 }}>
+            {remaining > 0
+              ? `Your answers were saved — ${fmtTime(remaining)} remaining on the clock.`
+              : 'Time ran out on this attempt — resuming will submit the saved answers for grading.'}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 14, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button style={t.cta} onClick={onStart}>
-          Start exam
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h13M13 6l6 6-6 6" />
-          </svg>
+        {resume && (
+          <button style={t.cta} onClick={onResume}>
+            {remaining > 0 ? `Resume attempt · ${fmtTime(remaining)} left` : 'Submit saved answers'}
+          </button>
+        )}
+        <button style={resume ? t.ghostBtn : t.cta} onClick={onStart}>
+          {resume ? 'Start over' : 'Start exam'}
+          {!resume && (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h13M13 6l6 6-6 6" />
+            </svg>
+          )}
         </button>
         {!aiOn && (
           <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.55)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -358,7 +462,7 @@ function Intro({ t, onStart, reduceMotion, aiOn, onConnect, total, marks, meta, 
 // ---------------------------------------------------------------------------
 function ActiveExam({
   t, q, questions, total, current, setCurrent, answers, setAnswer, flagged, toggleFlag,
-  answeredCount, secondsLeft, lowTime, onSubmit, onAsk,
+  answeredCount, secondsLeft, lowTime, onSubmit, onAsk, saveState,
 }) {
   const progress = (answeredCount / total) * 100
   const timerColor = lowTime ? t.CORAL : t.accent
@@ -565,8 +669,8 @@ function ActiveExam({
 
           <div style={{ ...t.GLASS, borderRadius: 24, padding: '20px 22px' }}>
             <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.55)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: t.OK, boxShadow: `0 0 7px ${t.OK}` }} />
-              Answers autosaved
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: saveState === 'error' ? '#FFB347' : saveState === 'saved' ? t.OK : 'rgba(var(--text-rgb),0.35)', boxShadow: saveState === 'saved' ? `0 0 7px ${t.OK}` : 'none' }} />
+              {saveState === 'error' ? 'Autosave unavailable — storage full' : saveState === 'saved' ? 'Answers autosaved — safe to refresh' : 'Autosave on'}
             </div>
             <button style={{ ...t.cta, width: '100%', justifyContent: 'center' }} onClick={onSubmit}>
               Submit exam
@@ -709,7 +813,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 44, letterSpacing: '-0.03em' }}>
-                {Math.round(scaled)}<span style={{ fontSize: 24, color: 'rgba(var(--text-rgb),0.45)' }}>/{totalMk}</span>
+                {fmtMarks(scaled)}<span style={{ fontSize: 24, color: 'rgba(var(--text-rgb),0.45)' }}>/{totalMk}</span>
               </div>
               <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.45)' }}>
                 {Math.round(pct * 100)}% · marks
@@ -829,7 +933,8 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
   const partial = !ok && r.score > 0
   const color = ok ? t.OK : partial ? '#FFB347' : t.CORAL
   const marks = Number(q.marks) || 1
-  const earned = Math.round(r.score * marks)
+  // Keep one decimal so a partial score (e.g. 0.5) doesn't display as full marks.
+  const earned = Math.round(r.score * marks * 10) / 10
   const imgAns = isImageAnswer(studentAnswer)
   const given = imgAns ? '' : ((studentAnswer ?? '').toString().trim() || '—')
 
@@ -862,7 +967,7 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
             <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.45 }}>{q.prompt}</div>
             <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', whiteSpace: 'nowrap' }}>
-              {q.topic} · {earned}/{marks} mark{marks === 1 ? '' : 's'}
+              {q.topic} · {fmtMarks(earned)}/{marks} mark{marks === 1 ? '' : 's'}
             </span>
           </div>
 
