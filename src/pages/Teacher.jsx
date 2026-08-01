@@ -128,6 +128,11 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
         </div>
       </div>
 
+      {/* CLASSES & JOIN CODES (school server connected) */}
+      {store.mode === 'cloud-teacher' && (
+        <ClassesPanel t={t} store={store} toast={toast} label={label} inputStyle={inputStyle} />
+      )}
+
       {/* CREATE / EDIT EXAM */}
       <section style={{ ...t.GLASS, borderRadius: 24, padding: '26px 28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
@@ -279,5 +284,74 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
         </div>
       </section>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Classes & join codes — the roster mechanism when a school server is
+// connected. A student enters the code once; from then on their submissions
+// arrive in this dashboard from any device.
+// ---------------------------------------------------------------------------
+function ClassesPanel({ t, store, toast, label, inputStyle }) {
+  const [name, setName] = useState('')
+
+  function create() {
+    const clean = name.trim()
+    if (!clean) { toast('Give the class a name'); return }
+    store.addClass(clean)
+    setName('')
+  }
+
+  return (
+    <section style={{ ...t.GLASS, borderRadius: 24, padding: '24px 26px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>Your classes</div>
+        <span style={{ fontSize: 12, color: sub(0.5) }}>Students join once with a code — their results then reach you from any device.</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          style={{ ...inputStyle, width: 260 }}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Year 12 Maths — Set 1"
+          onKeyDown={(e) => e.key === 'Enter' && create()}
+        />
+        <button style={{ ...t.cta, padding: '12px 20px' }} onClick={create}>+ Create class</button>
+      </div>
+
+      {store.classes.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, marginTop: 16 }}>
+          {store.classes.map((c) => (
+            <div key={c.id} style={{ padding: '14px 16px', borderRadius: 14, background: fill(0.03), border: `1px solid ${fill(0.08)}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <button
+                  onClick={() => { store.deleteClass(c.id); toast('Class removed') }}
+                  style={{ background: 'none', border: 'none', color: t.CORAL, cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}
+                >
+                  Remove
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                <span
+                  title="Click to copy"
+                  onClick={() => {
+                    try { navigator.clipboard?.writeText(c.code); toast(`Code ${c.code} copied`) } catch { /* ignore */ }
+                  }}
+                  style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: '0.18em', color: t.accent, cursor: 'pointer' }}
+                >
+                  {c.code}
+                </span>
+                <span style={{ fontSize: 11.5, color: sub(0.5) }}>
+                  {(c.roster || []).length} student{(c.roster || []).length === 1 ? '' : 's'} joined
+                </span>
+              </div>
+              <div style={{ ...label, marginTop: 8, marginBottom: 0, fontSize: 10 }}>Join code — share with the class</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }

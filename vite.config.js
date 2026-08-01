@@ -67,6 +67,13 @@ export default defineConfig({
   // sets VITE_BASE accordingly; locally it stays at '/'.
   base: process.env.VITE_BASE || '/',
   plugins: [react(), anthropicProxy()],
-  server: { host: true, port: 5173 },
+  // Full-stack dev: run `node server/index.mjs` alongside and set
+  // BACKEND_URL=http://localhost:8787 to exercise cloud mode (classes, sync)
+  // through the dev server. Without it, dev runs in local mode as before.
+  server: {
+    host: true,
+    port: 5173,
+    ...(process.env.BACKEND_URL ? { proxy: { '/api': { target: process.env.BACKEND_URL, changeOrigin: true } } } : {}),
+  },
   preview: { host: true, port: 4173 },
 })

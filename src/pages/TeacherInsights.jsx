@@ -68,7 +68,12 @@ export default function TeacherInsights({ t, store, toast, aiOn, onConnect }) {
 
         {queue.length === 0 ? (
           <div style={{ fontSize: 13.5, color: sub(0.5), padding: '18px 0' }}>
-            Nothing waiting for review{attempts.length === 0 ? ' — results appear here after students submit exams on this device' : ' — all AI marking looks confident'}.
+            Nothing waiting for review
+            {attempts.length === 0
+              ? store.mode === 'cloud-teacher'
+                ? ' — results appear here as students in your classes submit exams (any device)'
+                : ' — results appear here after students submit exams on this device'
+              : ' — all AI marking looks confident'}.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -79,7 +84,7 @@ export default function TeacherInsights({ t, store, toast, aiOn, onConnect }) {
               return (
                 <div key={`${e.attempt.id}-${e.index}-${qi}`} style={{ padding: 14, borderRadius: 14, background: fill(0.03), border: `1px solid ${fill(0.08)}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, color: sub(0.5), marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span><strong style={{ color: 'var(--ink)' }}>{e.attempt.student}</strong> · {e.attempt.examTitle}</span>
+                    <span><strong style={{ color: 'var(--ink)' }}>{e.attempt.student}</strong>{e.attempt.className ? ` (${e.attempt.className})` : ''} · {e.attempt.examTitle}</span>
                     <span>
                       AI: {aiMarks}/{marks} mark{marks === 1 ? '' : 's'}
                       {typeof it.confidence === 'number' ? ` · ${Math.round(it.confidence * 100)}% sure` : ' · unchecked'}

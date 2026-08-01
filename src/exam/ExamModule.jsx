@@ -101,12 +101,12 @@ async function answerThumb(ans) {
   }
 }
 
-export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, examId = 'builtin-mock', onGeneratePractice, onGraded }) {
+export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, questions = EXAM_QUESTIONS, meta = EXAM_META, examId = 'builtin-mock', initialStudentName = '', lockStudent = false, onGeneratePractice, onGraded }) {
   const reduceMotion = useReducedMotion()
   const total = questions.length
   const totalMkAll = questions.reduce((s, q) => s + (Number(q.marks) || 1), 0)
   const [genBusy, setGenBusy] = useState(false)
-  const [studentName, setStudentName] = useState('')
+  const [studentName, setStudentName] = useState(initialStudentName)
 
   const [phase, setPhase] = useState('intro') // intro | active | grading | review
   const [answers, setAnswers] = useState({})
@@ -132,7 +132,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
     const saved = readProgress(examId, qsig)
     if (saved) {
       setResumeData(saved)
-      if (saved.studentName) setStudentName(saved.studentName)
+      if (saved.studentName && !lockStudent) setStudentName(saved.studentName)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -307,7 +307,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 
   return (
     <div style={{ animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
-      {phase === 'intro' && <Intro t={t} onStart={begin} resume={resumeData} onResume={resumeAttempt} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} studentName={studentName} onName={setStudentName} />}
+      {phase === 'intro' && <Intro t={t} onStart={begin} resume={resumeData} onResume={resumeAttempt} reduceMotion={reduceMotion} aiOn={aiOn} onConnect={onConnect} total={total} marks={totalMkAll} meta={meta} studentName={studentName} onName={setStudentName} lockStudent={lockStudent} />}
 
       {phase === 'active' && (
         <ActiveExam
@@ -366,7 +366,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
 // ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
-function Intro({ t, onStart, resume, onResume, reduceMotion, aiOn, onConnect, total, marks, meta, studentName, onName }) {
+function Intro({ t, onStart, resume, onResume, reduceMotion, aiOn, onConnect, total, marks, meta, studentName, onName, lockStudent }) {
   const mins = Math.floor(meta.durationSeconds / 60)
   const remaining = resume ? Math.max(0, Math.ceil((resume.deadlineAt - Date.now()) / 1000)) : 0
   return (
@@ -413,12 +413,20 @@ function Intro({ t, onStart, resume, onResume, reduceMotion, aiOn, onConnect, to
       </div>
       <div style={{ marginTop: 22, maxWidth: 320 }}>
         <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)', marginBottom: 8 }}>Your name</div>
-        <input
-          value={studentName}
-          onChange={(e) => onName(e.target.value)}
-          placeholder="So your teacher knows whose work this is"
-          style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid rgba(var(--fill-rgb),0.12)', color: 'var(--ink)', fontSize: 14, fontFamily: "'Manrope',sans-serif", outline: 'none' }}
-        />
+        {lockStudent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px', borderRadius: 12, background: 'rgba(var(--fill-rgb),0.04)', border: '1px solid rgba(var(--fill-rgb),0.1)', fontSize: 14, fontWeight: 600 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: t.OK, boxShadow: `0 0 7px ${t.OK}` }} />
+            {studentName}
+            <span style={{ fontSize: 11.5, color: 'rgba(var(--text-rgb),0.45)', fontWeight: 500 }}>· submitting to your class</span>
+          </div>
+        ) : (
+          <input
+            value={studentName}
+            onChange={(e) => onName(e.target.value)}
+            placeholder="So your teacher knows whose work this is"
+            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid rgba(var(--fill-rgb),0.12)', color: 'var(--ink)', fontSize: 14, fontFamily: "'Manrope',sans-serif", outline: 'none' }}
+          />
+        )}
       </div>
       {resume && (
         <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 14, background: t.hexA(t.accent, 0.08), border: `1px solid ${t.hexA(t.accent, 0.35)}`, maxWidth: 560 }}>

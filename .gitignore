@@ -4,3 +4,7 @@ dist
 *.local
 .env
 .env.*
+
+# backend pilot data
+server/data.json
+server/data.json.tmp

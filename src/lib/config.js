@@ -5,4 +5,7 @@
 export const MODEL = 'claude-opus-4-8'
 
 // All AI calls go through the server proxy, which injects the API key.
-export const ANTHROPIC_ENDPOINT = '/api/anthropic'
+// VITE_API_BASE points the static build at a deployed backend (split hosting);
+// when unset, same-origin works for both `npm run dev` and the Node server.
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+export const ANTHROPIC_ENDPOINT = `${API_BASE}/api/anthropic`

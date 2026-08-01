@@ -71,6 +71,44 @@ src/
     AskAIPanel.jsx        question-scoped tutor (integrity-aware)
 ```
 
+## School server (cloud mode)
+
+Static hosting keeps everything in one browser. The optional backend in
+`server/index.mjs` (zero dependencies, Node 18+) turns the app into a real
+multi-device school deployment:
+
+- **AI for everyone** — the Anthropic key lives on the server (`/api/anthropic`
+  proxy, rate-limited); students never paste keys.
+- **Teacher sign-in** — the Teacher tab is gated behind a per-school access key.
+- **Class join codes** — a teacher creates a class, students join once with the
+  6-character code + their name.
+- **Synced content** — published exams and announcements reach every student
+  device; submitted attempts flow back into the teacher's moderation queue and
+  class insights, no matter where the student sat the exam.
+
+```bash
+npm run build
+ANTHROPIC_API_KEY=sk-ant-... TEACHER_KEY=choose-a-secret node server/index.mjs
+# → serves the app + API on http://localhost:8787
+```
+
+Deploy the same thing to any Node host (Railway, Render, Fly, a school
+machine). Env vars: `PORT`, `ANTHROPIC_API_KEY`, `TEACHER_KEY` (or per-school
+`TEACHER_KEY_BGA` / `TEACHER_KEY_BIST`), `DATA_FILE` (persistence path — put it
+on a persistent volume), `ALLOWED_ORIGIN` (for split hosting).
+
+**Split hosting:** keep the UI on GitHub Pages and point it at the backend by
+building with `VITE_API_BASE=https://your-backend.example.com`. Without a
+reachable backend the app automatically runs in the original local mode, so
+the Pages deployment keeps working either way.
+
+For full-stack local development: `npm run server` in one terminal, and
+`BACKEND_URL=http://localhost:8787 npm run dev` in another.
+
+> Storage is a single JSON file and teacher auth is a shared access key —
+> deliberately simple pilot infrastructure for a two-school deployment, not
+> yet a hardened multi-tenant service. Attempts are capped at 400 per school.
+
 ## Deploy to GitHub Pages
 
 `.github/workflows/deploy-pages.yml` builds the app and deploys it on every push

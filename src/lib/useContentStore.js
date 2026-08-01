@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { EXAM_QUESTIONS, EXAM_META } from '../data/examQuestions.js'
+import { api } from './api.js'
 
-// Shared store for teacher-authored content. Persisted to localStorage so what a
-// teacher adds is still there after a reload (the only option on static hosting,
-// since there's no backend). Exam-taking answers stay in React state.
+// Shared store for teacher-authored content and recorded attempts.
+//
+// Two modes, same interface, so every consumer (Teacher, TeacherInsights,
+// ExamsView, Home) works unchanged:
+//   • local — everything in this browser's localStorage (static hosting; the
+//     behaviour the app has always had).
+//   • cloud — a backend (server/index.mjs) is reachable AND the user has an
+//     identity: teacher content syncs school-wide, student attempts flow to
+//     the teacher's moderation queue from any device.
 const KEY = 'lh_store_v1'
 
 const rid = (p) => p + Math.random().toString(36).slice(2, 9)
@@ -40,8 +47,16 @@ function load() {
   return { customExams: [], announcements: [], attempts: [], practiceSets: [] }
 }
 
-export function useContentStore() {
+export function useContentStore({ cloud = false, session = null, notify, onAuthError } = {}) {
   const [data, setData] = useState(load)
+  const [cloudData, setCloudData] = useState({ classes: [], exams: [], announcements: [], attempts: [] })
+  const [syncing, setSyncing] = useState(false)
+
+  const mode =
+    cloud && session?.role === 'teacher' ? 'cloud-teacher'
+    : cloud && session?.role === 'student' ? 'cloud-student'
+    : 'local'
+  const token = session?.role === 'teacher' ? session.token : null
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -52,17 +67,113 @@ export function useContentStore() {
     }
   }, [data])
 
-  const addExam = (exam) =>
+  // Surface sync failures without crashing UI flows; kick expired teacher
+  // tokens back to the login card.
+  const fail = useCallback(
+    (err, what) => {
+      console.error(`${what} failed:`, err)
+      if (err?.status === 401 && onAuthError) onAuthError()
+      else notify?.(`${what} failed: ${err?.message || 'server unreachable'}`)
+    },
+    [notify, onAuthError],
+  )
+
+  const refresh = useCallback(async () => {
+    if (mode === 'local') return
+    setSyncing(true)
+    try {
+      if (mode === 'cloud-teacher') {
+        const s = await api.teacherState(token)
+        setCloudData({
+          classes: s.classes || [],
+          exams: s.exams || [],
+          announcements: s.announcements || [],
+          attempts: s.attempts || [],
+        })
+      } else {
+        const s = await api.studentState(session.classCode)
+        setCloudData((d) => ({ ...d, exams: s.exams || [], announcements: s.announcements || [] }))
+      }
+    } catch (err) {
+      fail(err, 'Sync')
+    } finally {
+      setSyncing(false)
+    }
+  }, [mode, token, session?.classCode, fail])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  // Re-sync when the tab regains focus, so a teacher sees fresh submissions
+  // and students pick up newly published exams without a manual reload.
+  useEffect(() => {
+    if (mode === 'local' || typeof window === 'undefined') return
+    const onFocus = () => refresh()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [mode, refresh])
+
+  // ---- exams ----------------------------------------------------------------
+  const addExam = (exam) => {
+    if (mode === 'cloud-teacher') {
+      api.createExam(token, exam)
+        .then((created) => setCloudData((d) => ({ ...d, exams: [created, ...d.exams] })))
+        .catch((err) => fail(err, 'Publishing the exam'))
+      return
+    }
     setData((d) => ({ ...d, customExams: [{ ...exam, id: rid('x'), builtin: false }, ...d.customExams] }))
-  const updateExam = (id, patch) =>
+  }
+  const updateExam = (id, patch) => {
+    if (mode === 'cloud-teacher') {
+      api.updateExam(token, id, patch)
+        .then((updated) => setCloudData((d) => ({ ...d, exams: d.exams.map((e) => (e.id === id ? updated : e)) })))
+        .catch((err) => fail(err, 'Updating the exam'))
+      return
+    }
     setData((d) => ({ ...d, customExams: d.customExams.map((e) => (e.id === id ? { ...e, ...patch } : e)) }))
-  const deleteExam = (id) =>
+  }
+  const deleteExam = (id) => {
+    if (mode === 'cloud-teacher') {
+      setCloudData((d) => ({ ...d, exams: d.exams.filter((e) => e.id !== id) }))
+      api.deleteExam(token, id).catch((err) => fail(err, 'Deleting the exam'))
+      return
+    }
     setData((d) => ({ ...d, customExams: d.customExams.filter((e) => e.id !== id) }))
-  // Attempts: every submitted exam is recorded so the teacher can moderate AI
-  // marking and get class-level error insights. Capped to keep localStorage sane.
-  const saveAttempt = (attempt) =>
+  }
+
+  // ---- attempts ---------------------------------------------------------------
+  // Every submitted exam is recorded so the teacher can moderate AI marking and
+  // get class-level error insights. In cloud mode the attempt goes to the
+  // server (any device); locally it's capped to keep localStorage sane.
+  const saveAttemptLocal = (attempt) =>
     setData((d) => ({ ...d, attempts: [attempt, ...(d.attempts || [])].slice(0, 40) }))
-  const updateAttemptItem = (attemptId, index, patch) =>
+  const saveAttempt = (attempt) => {
+    if (mode === 'cloud-student') {
+      const record = { ...attempt, student: session.name }
+      api.postAttempt(session.classCode, record).catch((err) => {
+        saveAttemptLocal(record) // don't lose the work — keep it on-device
+        fail(err, 'Sending your result to the teacher')
+      })
+      return
+    }
+    if (mode === 'cloud-teacher') {
+      // A teacher sitting an exam themselves (e.g. "view as student") still
+      // records locally — their own attempt isn't class data.
+      saveAttemptLocal(attempt)
+      return
+    }
+    saveAttemptLocal(attempt)
+  }
+  const updateAttemptItem = (attemptId, index, patch) => {
+    if (mode === 'cloud-teacher') {
+      api.patchAttemptItem(token, attemptId, index, patch)
+        .then((updated) =>
+          setCloudData((d) => ({ ...d, attempts: d.attempts.map((a) => (a.id === attemptId ? updated : a)) })),
+        )
+        .catch((err) => fail(err, 'Saving the mark override'))
+      return
+    }
     setData((d) => ({
       ...d,
       attempts: (d.attempts || []).map((a) => {
@@ -72,15 +183,49 @@ export function useContentStore() {
         return { ...a, items, earnedMarks: Math.round(earnedMarks * 10) / 10 }
       }),
     }))
-  const clearAttempts = () => setData((d) => ({ ...d, attempts: [] }))
+  }
+  const clearAttempts = () => {
+    if (mode === 'cloud-teacher') {
+      setCloudData((d) => ({ ...d, attempts: [] }))
+      api.clearAttempts(token).catch((err) => fail(err, 'Clearing attempts'))
+      return
+    }
+    setData((d) => ({ ...d, attempts: [] }))
+  }
 
-  const addAnnouncement = (a) =>
+  // ---- announcements ----------------------------------------------------------
+  const addAnnouncement = (a) => {
+    if (mode === 'cloud-teacher') {
+      api.postAnnouncement(token, a)
+        .then((created) => setCloudData((d) => ({ ...d, announcements: [created, ...d.announcements] })))
+        .catch((err) => fail(err, 'Posting the announcement'))
+      return
+    }
     setData((d) => ({ ...d, announcements: [{ ...a, id: rid('a'), date: Date.now() }, ...d.announcements] }))
-  const deleteAnnouncement = (id) =>
+  }
+  const deleteAnnouncement = (id) => {
+    if (mode === 'cloud-teacher') {
+      setCloudData((d) => ({ ...d, announcements: d.announcements.filter((a) => a.id !== id) }))
+      api.deleteAnnouncement(token, id).catch((err) => fail(err, 'Deleting the announcement'))
+      return
+    }
     setData((d) => ({ ...d, announcements: d.announcements.filter((a) => a.id !== id) }))
+  }
 
-  // AI practice sets: persisted so a generated set survives reload and can be
-  // re-sat later. Capped to keep localStorage quota sane.
+  // ---- classes (cloud-teacher only) ---------------------------------------------
+  const addClass = (name) => {
+    if (mode !== 'cloud-teacher') return
+    api.createClass(token, name)
+      .then((cls) => setCloudData((d) => ({ ...d, classes: [...d.classes, cls] })))
+      .catch((err) => fail(err, 'Creating the class'))
+  }
+  const deleteClass = (id) => {
+    if (mode !== 'cloud-teacher') return
+    setCloudData((d) => ({ ...d, classes: d.classes.filter((c) => c.id !== id) }))
+    api.deleteClass(token, id).catch((err) => fail(err, 'Removing the class'))
+  }
+
+  // ---- practice sets: always personal, always local -----------------------------
   const addPracticeSet = (set) => {
     const id = rid('p')
     setData((d) => ({
@@ -92,34 +237,30 @@ export function useContentStore() {
   const deletePracticeSet = (id) =>
     setData((d) => ({ ...d, practiceSets: (d.practiceSets || []).filter((p) => p.id !== id) }))
 
+  const isCloud = mode !== 'local'
+  const customExams = isCloud ? cloudData.exams : data.customExams
   return {
-    exams: [builtinExam(), ...data.customExams],
-    customExams: data.customExams,
-    announcements: data.announcements,
+    mode,
+    syncing,
+    refresh,
+    exams: [builtinExam(), ...customExams],
+    customExams,
+    announcements: isCloud ? cloudData.announcements : data.announcements,
     addExam,
     updateExam,
     deleteExam,
     addAnnouncement,
     deleteAnnouncement,
-    attempts: data.attempts || [],
+    attempts: mode === 'cloud-teacher' ? cloudData.attempts : data.attempts || [],
     saveAttempt,
     updateAttemptItem,
     clearAttempts,
+    classes: mode === 'cloud-teacher' ? cloudData.classes : [],
+    addClass,
+    deleteClass,
     practiceSets: data.practiceSets || [],
     addPracticeSet,
     deletePracticeSet,
-  }
-}
-
-// Resolve a stored practice set into the meta shape ExamModule expects.
-export function practiceMeta(p) {
-  return {
-    title: p.title,
-    subject: p.subject,
-    subtitle: 'AI practice set',
-    description: p.description || 'Fresh AI-generated questions, similar in style to your exam.',
-    durationSeconds: (Number(p.durationMin) || 10) * 60,
-    passMark: Number(p.passMark) >= 0 ? Number(p.passMark) : 50,
   }
 }
 
@@ -139,6 +280,18 @@ export function examMeta(exam) {
     description: exam.description || '',
     durationSeconds: (exam.durationMin || 20) * 60,
     passMark: Number(exam.passMark) >= 0 ? Number(exam.passMark) : 50,
+  }
+}
+
+// Resolve a stored practice set into the meta shape ExamModule expects.
+export function practiceMeta(p) {
+  return {
+    title: p.title,
+    subject: p.subject,
+    subtitle: 'AI practice set',
+    description: p.description || 'Fresh AI-generated questions, similar in style to your exam.',
+    durationSeconds: (Number(p.durationMin) || 10) * 60,
+    passMark: Number(p.passMark) >= 0 ? Number(p.passMark) : 50,
   }
 }
 

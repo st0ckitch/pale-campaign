@@ -5,7 +5,7 @@ import ExamModule from './ExamModule.jsx'
 
 // Lists every available exam (the built-in mock + anything a teacher added) and
 // launches the chosen one through the shared, data-driven ExamModule.
-export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMotion, onGo }) {
+export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMotion, onGo, student = '' }) {
   const [activeId, setActiveId] = useState(null)
   const [practice, setPractice] = useState(null) // AI practice set being sat: { id, questions, meta }
   const active = store.exams.find((e) => e.id === activeId)
@@ -49,6 +49,8 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           questions={practice.questions}
           meta={practice.meta}
           examId={practice.id}
+          initialStudentName={student}
+          lockStudent={!!student}
           onGeneratePractice={launchPractice}
           onGraded={store.saveAttempt}
         />
@@ -70,6 +72,8 @@ export default function ExamsView({ t, store, aiOn, onConnect, toast, reduceMoti
           questions={questions}
           meta={examMeta(active)}
           examId={active.id}
+          initialStudentName={student}
+          lockStudent={!!student}
           onGeneratePractice={launchPractice}
           onGraded={store.saveAttempt}
         />
