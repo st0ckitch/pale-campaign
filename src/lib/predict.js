@@ -125,6 +125,16 @@ export function trendBonus(mocks) {
   return clamp(slope * 0.5, -5, 5)
 }
 
+// Grade a raw % against a set of boundaries (no shifting) — also the "static
+// read": what the prediction would be if boundaries were frozen at their
+// historical average and the student scored exactly the composite.
+export function gradeAt(score, bounds) {
+  for (let k = 7; k >= 2; k--) {
+    if (score >= Number(bounds[k])) return k
+  }
+  return 1
+}
+
 // ---------------------------------------------------------------------------
 // The full pipeline for one student × subject row.
 // Input row: { student, subject, iaScore, iaMax, iaWeightPct, driftPct,
@@ -162,14 +172,14 @@ export function predictStudent(row) {
   const rng = mulberry32(hashStr(JSON.stringify([row.student, row.subject, composite, mocks, drift, eps])))
 
   const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 }
+  const draws = []
   for (let i = 0; i < ENGINE.runs; i++) {
     const shift = gauss(rng) * bSig
     const score = composite + gauss(rng) * eSig
-    let g = 1
-    for (let k = 7; k >= 2; k--) {
-      if (score >= Number(bounds[k]) + shift) { g = k; break }
-    }
+    const g = gradeAt(score - shift, bounds)
     counts[g]++
+    // every draw is kept so the UI can replay the simulation session by session
+    draws.push({ shift: Math.round(shift * 10) / 10, score: Math.round(score * 10) / 10, grade: g })
   }
 
   const probs = {}
@@ -195,5 +205,8 @@ export function predictStudent(row) {
     // The doc's guard against over-upgrading: never submit a grade the
     // simulation is <60% sure of without a human decision.
     flagged: top.p < 0.6,
+    // What a spreadsheet would say: composite vs frozen average boundaries.
+    staticGrade: gradeAt(composite, bounds),
+    draws,
   }
 }

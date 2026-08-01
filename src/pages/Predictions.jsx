@@ -455,6 +455,39 @@ function PredictionResult({ t, result: r, preset, row }) {
         </div>
       )}
 
+      {/* without vs with the simulation */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: fill(0.03), border: `1px solid ${fill(0.09)}` }}>
+          <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4), marginBottom: 6 }}>
+            Without the simulation — static read
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 26, color: sub(0.55) }}>{r.staticGrade}</span>
+            <span style={{ fontSize: 11.5, color: sub(0.5) }}>one number, no risk info</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: sub(0.5), lineHeight: 1.55, marginTop: 4 }}>
+            {fmtPct(r.composite)}% against boundaries frozen at their historical average
+            (7 ≥ {preset.bounds[7]}%, 6 ≥ {preset.bounds[6]}%…) — how a spreadsheet would read it.
+          </div>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: t.hexA(t.accent, 0.05), border: `1px solid ${t.hexA(t.accent, 0.3)}` }}>
+          <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: t.accent, marginBottom: 6 }}>
+            With {ENGINE.runs} simulated sessions
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 26, color }}>{r.top.grade}</span>
+            <span style={{ fontSize: 11.5, color: sub(0.6), fontWeight: 700 }}>{Math.round(r.top.p * 100)}% · plus the {Math.round(r.second.p * 100)}% risk of a {r.second.grade}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: sub(0.55), lineHeight: 1.55, marginTop: 4 }}>
+            {r.staticGrade === r.top.grade
+              ? <>Same headline grade — but now you can see how safe it actually is before submitting it.</>
+              : <>The static read says <strong>{r.staticGrade}</strong>, but across realistically shifted boundaries <strong>{r.top.grade}</strong> is the more likely outcome — exactly the case a fixed cut-off gets wrong.</>}
+          </div>
+        </div>
+      </div>
+
+      <LiveSim t={t} draws={r.draws} bounds={preset.bounds} composite={r.composite} top={r.top} />
+
       {/* explainability — every number the engine used */}
       <div style={{ padding: '12px 14px', borderRadius: 12, background: fill(0.03), border: `1px solid ${fill(0.08)}` }}>
         <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4), marginBottom: 8 }}>Why — full working</div>
@@ -472,6 +505,110 @@ function PredictionResult({ t, result: r, preset, row }) {
           <span>Composite <strong style={{ color: 'var(--ink)' }}>M̂ = {fmtPct(r.composite)}%</strong> · tested against {ENGINE.runs} sessions with boundaries shifted ±{ENGINE.boundarySigma}% (σ) around the {row.subject} history (7 ≥ {preset.bounds[7]}%, 6 ≥ {preset.bounds[6]}%, 5 ≥ {preset.bounds[5]}%…)</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Replays the Monte Carlo run session by session so the "1000 iterations"
+// stop being abstract. The draws come from the SAME seeded run that produced
+// the headline probabilities — the engine computes all 1000 instantly (<1ms,
+// in the browser, on every edit); this component only reveals them slowly.
+// ---------------------------------------------------------------------------
+function LiveSim({ t, draws, bounds, composite, top }) {
+  const [open, setOpen] = useState(false)
+  const [n, setN] = useState(0) // sessions revealed so far
+  const [playing, setPlaying] = useState(false)
+  const total = draws.length
+
+  useEffect(() => {
+    if (!playing) return
+    const id = setInterval(() => {
+      setN((v) => {
+        const next = Math.min(total, v + 9)
+        if (next >= total) setPlaying(false)
+        return next
+      })
+    }, 40)
+    return () => clearInterval(id)
+  }, [playing, total])
+
+  // A new prediction (inputs changed) invalidates a half-played run.
+  useEffect(() => { setN(0); setPlaying(false) }, [draws])
+
+  const start = () => {
+    setOpen(true)
+    setN(0)
+    setPlaying(true)
+  }
+
+  const seen = draws.slice(0, n)
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 }
+  for (const d of seen) counts[d.grade]++
+  const last = n > 0 ? draws[n - 1] : null
+  const done = n >= total
+
+  return (
+    <div style={{ borderRadius: 12, background: fill(0.03), border: `1px solid ${fill(0.08)}`, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
+        <button
+          onClick={playing ? () => setPlaying(false) : start}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 15px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", background: t.hexA(t.accent, 0.14), border: `1px solid ${t.hexA(t.accent, 0.5)}`, color: 'var(--ink)' }}
+        >
+          {playing ? '⏸ Pause' : n > 0 && !done ? '▶ Resume' : `▶ Watch the ${total.toLocaleString()} sessions run`}
+        </button>
+        {n > 0 && (
+          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13 }}>
+            Session {n.toLocaleString()} / {total.toLocaleString()}
+          </span>
+        )}
+        {done && (
+          <span style={{ fontSize: 11.5, color: t.OK, fontWeight: 700 }}>
+            ✓ finished — P({top.grade}) = {Math.round((counts[top.grade] / total) * 100)}%, same as the headline (same seeded draws)
+          </span>
+        )}
+        {n === 0 && (
+          <span style={{ fontSize: 11.5, color: sub(0.5) }}>
+            The engine already ran all of them instantly — this replays the exact same draws slowly.
+          </span>
+        )}
+      </div>
+
+      {open && n > 0 && (
+        <div style={{ padding: '4px 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* the current draw, spelled out */}
+          {last && (
+            <div style={{ padding: '9px 12px', borderRadius: 10, background: '#FFFFFF', border: `1px solid ${fill(0.1)}`, fontSize: 12, lineHeight: 1.6, color: sub(0.7) }}>
+              <strong style={{ color: 'var(--ink)' }}>Session #{n}:</strong>{' '}
+              paper difficulty shifts every boundary <strong style={{ color: last.shift >= 0 ? '#B87514' : t.OK }}>{last.shift >= 0 ? '+' : ''}{last.shift}%</strong>{' '}
+              (a 7 needs {fmtPct(Number(bounds[7]) + last.shift)}%, a 6 needs {fmtPct(Number(bounds[6]) + last.shift)}%) ·
+              exam-day draw around M̂ {fmtPct(composite)}% lands on <strong style={{ color: 'var(--ink)' }}>{last.score}%</strong>{' '}
+              → <strong style={{ color: gradeColor(t, last.grade) }}>grade {last.grade}</strong>
+            </div>
+          )}
+
+          {/* accumulating tallies */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {[7, 6, 5, 4, 3, 2, 1].map((g) => {
+              const c = counts[g]
+              const pct = n ? (c / n) * 100 : 0
+              if (c === 0 && !done) return null
+              if (c === 0) return null
+              return (
+                <div key={g} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 12, width: 14, color: gradeColor(t, g) }}>{g}</span>
+                  <div style={{ flex: 1, height: 14, borderRadius: 999, background: fill(0.06), overflow: 'hidden' }}>
+                    <div style={{ width: `${(c / total) * 100}%`, height: '100%', borderRadius: 999, background: t.hexA(gradeColor(t, g), 0.75), transition: 'width .04s linear' }} />
+                  </div>
+                  <span style={{ fontSize: 11.5, color: sub(0.55), width: 130, fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600 }}>
+                    {c.toLocaleString()} session{c === 1 ? '' : 's'} · {Math.round(pct)}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
