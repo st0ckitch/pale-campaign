@@ -1,5 +1,7 @@
--- Learning Hub — Supabase schema.
--- Paste this whole file into the Supabase dashboard → SQL Editor → Run.
+-- Learning Hub — Supabase schema (initial migration).
+-- Applied automatically by the Supabase GitHub integration on push to main
+-- (Settings → Integrations → production branch = main). If the integration
+-- isn't set up, paste this file into SQL Editor → Run — it's idempotent.
 --
 -- Access model: every table has Row Level Security enabled with NO policies,
 -- so the public Data API cannot read or write anything. Only the Edge

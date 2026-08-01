@@ -81,15 +81,20 @@ The repo is set up for a zero-server-management deployment:
   `supabase/functions/api/index.ts` (same API as the Node server below) with
   the project's Postgres as storage and the Anthropic key in Supabase secrets.
 
-One-time Supabase setup (all in the dashboard):
+One-time Supabase setup:
 
-1. **SQL Editor** → paste the whole of `supabase/schema.sql` → **Run**.
+1. **Settings → Integrations → GitHub**: connect the repo, working directory
+   `.`, production branch **`main`**, "Deploy to production" on. Pushes to
+   main then apply `supabase/migrations/` (the tables) automatically.
+   *(No integration? Paste `supabase/migrations/20260801000000_init.sql` into
+   SQL Editor → Run instead.)*
 2. **Edge Functions → Secrets** → add `ANTHROPIC_API_KEY` and `TEACHER_KEY`
    (optionally `TEACHER_KEY_BGA` / `TEACHER_KEY_BIST` for separate keys).
-3. **Edge Functions → Deploy a new function** → name it exactly `api`, paste
-   the contents of `supabase/functions/api/index.ts`, deploy — then open the
-   function's **Details** and turn **Verify JWT off** (the app has its own
-   auth: teacher tokens + class codes).
+3. Deploy the function if the integration hasn't already: **Edge Functions →
+   Deploy a new function** → name it exactly `api`, paste the contents of
+   `supabase/functions/api/index.ts`, deploy — then in the function's settings
+   turn **Verify JWT off** (the app has its own auth: teacher tokens + class
+   codes).
    *(CLI alternative: `npx supabase link && npx supabase functions deploy api`.)*
 4. Copy the base URL `https://<project-ref>.supabase.co/functions/v1` and set
    it as the `VITE_API_BASE` environment variable in Vercel
