@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { EXAM_QUESTIONS, EXAM_META } from '../data/examQuestions.js'
 import { api } from './api.js'
 
@@ -67,16 +67,24 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     }
   }, [data])
 
-  // Surface sync failures without crashing UI flows; kick expired teacher
-  // tokens back to the login card.
-  const fail = useCallback(
-    (err, what) => {
-      console.error(`${what} failed:`, err)
-      if (err?.status === 401 && onAuthError) onAuthError()
-      else notify?.(`${what} failed: ${err?.message || 'server unreachable'}`)
-    },
-    [notify, onAuthError],
-  )
+  // Callbacks live in refs so `fail`/`refresh` keep a stable identity even if
+  // a caller passes fresh closures each render — otherwise the refresh effect
+  // re-fires per render, and a failing sync + its toast re-render feed each
+  // other into an endless "Sync failed" loop.
+  const notifyRef = useRef(notify)
+  notifyRef.current = notify
+  const authErrorRef = useRef(onAuthError)
+  authErrorRef.current = onAuthError
+  // Background sync errors surface once per failure streak, not per attempt.
+  const syncErrorShown = useRef(false)
+
+  // Surface failures without crashing UI flows; kick expired sessions back to
+  // the login card.
+  const fail = useCallback((err, what) => {
+    console.error(`${what} failed:`, err)
+    if (err?.status === 401 && authErrorRef.current) authErrorRef.current()
+    else notifyRef.current?.(`${what} failed: ${err?.message || 'server unreachable'}`)
+  }, [])
 
   const refresh = useCallback(async () => {
     if (mode === 'local') return
@@ -95,8 +103,16 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
         const s = await api.studentState(token)
         setCloudData((d) => ({ ...d, exams: s.exams || [], announcements: s.announcements || [] }))
       }
+      syncErrorShown.current = false // back online — allow the next error through
     } catch (err) {
-      fail(err, 'Sync')
+      if (err?.status === 401) {
+        fail(err, 'Sync')
+      } else if (!syncErrorShown.current) {
+        syncErrorShown.current = true
+        fail(err, 'Sync')
+      } else {
+        console.error('Sync failed (suppressed toast):', err)
+      }
     } finally {
       setSyncing(false)
     }

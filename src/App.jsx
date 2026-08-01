@@ -49,7 +49,8 @@ export default function App() {
 
   const toast = useCallback((msg) => {
     const id = Math.random().toString(36).slice(2)
-    setToasts((ts) => [...ts, { id, msg }])
+    // Skip duplicates that are already on screen (e.g. repeated sync errors).
+    setToasts((ts) => (ts.some((x) => x.msg === msg) ? ts : [...ts, { id, msg }]))
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 3400)
   }, [])
 
@@ -59,11 +60,15 @@ export default function App() {
     if (msg) toast(msg)
   }, [toast])
 
+  // Stable identity — an inline arrow here would rebuild the store's refresh
+  // callback every render and re-trigger syncs in a loop.
+  const handleAuthError = useCallback(() => signOut('Session expired — please sign in again'), [signOut])
+
   const store = useContentStore({
     cloud: !!backend,
     session,
     notify: toast,
-    onAuthError: () => signOut('Session expired — please sign in again'),
+    onAuthError: handleAuthError,
   })
   const t = getTheme(brand)
 
