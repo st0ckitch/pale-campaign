@@ -218,6 +218,9 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
           const isImg = raw && typeof raw === 'object' && raw.image
           return {
             prompt: q.prompt,
+            stem: q.stem ?? null,
+            partLabel: q.partLabel ?? null,
+            displayLabel: q.displayLabel ?? null,
             topic: q.topic || meta.subject || 'General',
             type: q.type,
             marks: Number(q.marks) || 1,
@@ -232,6 +235,7 @@ export default function ExamModule({ theme: t, toast, aiOn = false, onConnect, q
             confidence: r.confidence ?? null,
             source: r.source,
             needsReview: !!r.needsReview,
+            points: r.points ?? null,
           }
         }))
         const totalMarks = items.reduce((s, it) => s + it.marks, 0)
@@ -390,6 +394,33 @@ function Intro({ t, onStart, resume, onResume, reduceMotion, aiOn, onConnect, to
           tutor for a hint on any question — it guides your method but won't hand you the answer until you submit.
         </p>
       )}
+      {meta.paper && (meta.paper.course || meta.paper.level || meta.paper.paper || meta.paper.calculator != null) ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+          {[
+            meta.paper.course ? `Mathematics ${meta.paper.course}` : null,
+            meta.paper.level || null,
+            meta.paper.paper ? `Paper ${String(meta.paper.paper).replace(/^p/i, '')}` : null,
+            meta.paper.calculator == null ? null : meta.paper.calculator ? 'Calculator allowed' : 'No calculator',
+          ].filter(Boolean).map((label) => (
+            <span
+              key={label}
+              style={{
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                padding: '6px 13px',
+                borderRadius: 999,
+                background: t.hexA(t.accent, 0.1),
+                border: `1px solid ${t.hexA(t.accent, 0.3)}`,
+                color: t.accent,
+              }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div style={{ display: 'flex', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
         {[
           [String(total), 'Questions'],
@@ -497,23 +528,39 @@ function ActiveExam({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
               <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(var(--text-rgb),0.4)' }}>
-                Question {current + 1} of {total}
+                Question {q.displayLabel || current + 1} · {current + 1} of {total}
               </div>
-              <div
-                style={{
-                  display: 'inline-block',
-                  marginTop: 8,
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  padding: '4px 11px',
-                  borderRadius: 999,
-                  background: t.hexA(t.accent, 0.12),
-                  border: `1px solid ${t.hexA(t.accent, 0.3)}`,
-                  color: t.accent,
-                  fontWeight: 600,
-                }}
-              >
-                {q.topic}
+              <div style={{ display: 'flex', gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'inline-block',
+                    fontSize: 11,
+                    letterSpacing: '0.04em',
+                    padding: '4px 11px',
+                    borderRadius: 999,
+                    background: t.hexA(t.accent, 0.12),
+                    border: `1px solid ${t.hexA(t.accent, 0.3)}`,
+                    color: t.accent,
+                    fontWeight: 600,
+                  }}
+                >
+                  {q.topic}
+                </div>
+                <div
+                  style={{
+                    display: 'inline-block',
+                    fontSize: 11,
+                    letterSpacing: '0.04em',
+                    padding: '4px 11px',
+                    borderRadius: 999,
+                    background: 'rgba(var(--fill-rgb),0.05)',
+                    border: '1px solid rgba(var(--fill-rgb),0.12)',
+                    color: 'rgba(var(--text-rgb),0.6)',
+                    fontWeight: 600,
+                  }}
+                >
+                  [{Number(q.marks) || 1} mark{(Number(q.marks) || 1) === 1 ? '' : 's'}]
+                </div>
               </div>
             </div>
             {/* timer pill */}
@@ -539,9 +586,21 @@ function ActiveExam({
             </div>
           </div>
 
+          {/* shared stem (multi-part questions) */}
+          {q.stem ? (
+            <div style={{ marginTop: 20, padding: '13px 16px', borderRadius: 14, background: 'rgba(var(--fill-rgb),0.04)', border: '1px solid rgba(var(--fill-rgb),0.09)', fontSize: 14.5, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.82)', whiteSpace: 'pre-wrap' }}>
+              {q.stem}
+            </div>
+          ) : null}
+
           {/* prompt */}
-          <div style={{ marginTop: 24, fontSize: 19, fontWeight: 600, lineHeight: 1.5 }}>
-            <MathText latex={q.latex} fallback={q.prompt} display />
+          <div style={{ marginTop: q.stem ? 16 : 24, fontSize: 19, fontWeight: 600, lineHeight: 1.5, display: 'flex', gap: 10, alignItems: 'baseline' }}>
+            {q.partLabel ? (
+              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, color: t.accent, flexShrink: 0 }}>({q.partLabel})</span>
+            ) : null}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <MathText latex={q.latex} fallback={q.prompt} display />
+            </div>
           </div>
           <div style={{ marginTop: 8, fontSize: 13.5, color: 'rgba(var(--text-rgb),0.55)' }}>{q.prompt}</div>
 
@@ -637,7 +696,7 @@ function ActiveExam({
                       justifyContent: 'center',
                       height: 42,
                       borderRadius: 12,
-                      fontSize: 13,
+                      fontSize: qq.partLabel ? 11 : 13,
                       fontWeight: 600,
                       fontFamily: "'Space Grotesk',sans-serif",
                       cursor: 'pointer',
@@ -649,7 +708,7 @@ function ActiveExam({
                       color: isAnswered || isCur || isFlag ? t.INK : 'rgba(var(--text-rgb),0.45)',
                     }}
                   >
-                    {i + 1}
+                    {qq.displayLabel || i + 1}
                     {/* status dot */}
                     <span
                       style={{
@@ -771,7 +830,8 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
   const pct = totalMk ? earnedMk / totalMk : 0
   const passMark = meta.passMark ?? 50
   const passed = pct * 100 >= passMark
-  const grade = gradeBand(pct)
+  const gi = ibGradeInfo(pct, totalMk, earnedMk, meta.boundaries)
+  const grade = `IB grade ${gi.grade}`
 
   // ring
   const R = 52
@@ -846,8 +906,17 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
               {passed ? 'Pass' : 'Below pass'}
             </span>
           </div>
-          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 6, textAlign: 'center' }}>
-            Pass mark {passMark}% · IB band indicative — boundaries vary by session
+          {gi.gap ? (
+            <div style={{ marginTop: 10, padding: '8px 15px', borderRadius: 999, background: t.hexA(t.accent, 0.1), border: `1px solid ${t.hexA(t.accent, 0.3)}`, fontSize: 13, fontWeight: 700, color: t.accent, textAlign: 'center' }}>
+              {gi.gap.marks} mark{gi.gap.marks === 1 ? '' : 's'} from an IB {gi.gap.next}
+            </div>
+          ) : gi.grade === 7 ? (
+            <div style={{ marginTop: 10, padding: '8px 15px', borderRadius: 999, background: 'rgba(52,199,150,0.12)', border: '1px solid rgba(52,199,150,0.45)', fontSize: 13, fontWeight: 700, color: t.OK, textAlign: 'center' }}>
+              Top band — keep it there
+            </div>
+          ) : null}
+          <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 8, textAlign: 'center' }}>
+            Pass mark {passMark}% · {gi.custom ? 'boundaries set by your teacher' : 'indicative boundaries — real ones vary by session'}
           </div>
           <button style={{ ...t.ghostBtn, marginTop: 18 }} onClick={onRestart}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -921,17 +990,30 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
   )
 }
 
-// Indicative IB 1–7 grade from the marks percentage. Real IB boundaries
-// vary by subject and session — this is guidance, not an official conversion.
-function gradeBand(pct) {
+// IB 1–7 grade from the marks percentage. Uses the exam's teacher-set
+// boundaries when present, otherwise indicative defaults — real IB boundaries
+// vary by subject and session.
+export const DEFAULT_BOUNDARIES = { 7: 80, 6: 65, 5: 52, 4: 40, 3: 27, 2: 14 }
+
+export function ibGradeInfo(pct, totalMk, earnedMk, custom) {
+  const src = custom && typeof custom === 'object' ? custom : null
+  const bounds = {}
+  for (let g = 2; g <= 7; g++) {
+    const v = src ? Number(src[g]) : NaN
+    bounds[g] = Number.isFinite(v) && v > 0 ? v : DEFAULT_BOUNDARIES[g]
+  }
   const p = pct * 100
-  if (p >= 80) return 'IB grade 7'
-  if (p >= 65) return 'IB grade 6'
-  if (p >= 52) return 'IB grade 5'
-  if (p >= 40) return 'IB grade 4'
-  if (p >= 27) return 'IB grade 3'
-  if (p >= 14) return 'IB grade 2'
-  return 'IB grade 1'
+  let grade = 1
+  for (let g = 7; g >= 2; g--) {
+    if (p >= bounds[g]) { grade = g; break }
+  }
+  // "N marks from an IB (g+1)" — how close the next band is, in real marks.
+  let gap = null
+  if (grade < 7 && totalMk > 0) {
+    const needMarks = Math.ceil((bounds[grade + 1] / 100) * totalMk - earnedMk)
+    if (needMarks > 0) gap = { next: grade + 1, marks: needMarks }
+  }
+  return { grade, gap, custom: !!src }
 }
 
 function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
@@ -972,11 +1054,17 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-            <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.45 }}>{q.prompt}</div>
+            <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.45 }}>
+              {q.displayLabel ? <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, color: t.accent, marginRight: 8 }}>{q.displayLabel}</span> : null}
+              {q.prompt}
+            </div>
             <span style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', whiteSpace: 'nowrap' }}>
               {q.topic} · {fmtMarks(earned)}/{marks} mark{marks === 1 ? '' : 's'}
             </span>
           </div>
+          {q.stem ? (
+            <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, color: 'rgba(var(--text-rgb),0.55)', whiteSpace: 'pre-wrap' }}>{q.stem}</div>
+          ) : null}
 
           {/* answers */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'flex-start' }}>
@@ -990,6 +1078,41 @@ function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {
             )}
             <Tag label="Correct answer" value={q.correctAnswer} color={t.OK} t={t} />
           </div>
+
+          {/* per-point mark scheme verdict */}
+          {Array.isArray(r.points) && r.points.length > 0 && (
+            <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 14, background: 'rgba(var(--fill-rgb),0.03)', border: '1px solid rgba(var(--fill-rgb),0.08)' }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb),0.4)', marginBottom: 8 }}>
+                Mark scheme · {r.points.filter((p) => p.awarded).length}/{r.points.length} points
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {r.points.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12.5, lineHeight: 1.5 }}>
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontFamily: "'Space Grotesk',sans-serif",
+                        fontWeight: 700,
+                        fontSize: 11,
+                        padding: '2px 9px',
+                        borderRadius: 999,
+                        background: t.hexA(p.awarded ? t.OK : t.CORAL, 0.12),
+                        border: `1px solid ${t.hexA(p.awarded ? t.OK : t.CORAL, 0.4)}`,
+                        color: p.awarded ? t.OK : t.CORAL,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {p.awarded ? '✓' : '✗'} {p.code}
+                    </span>
+                    <span style={{ color: 'rgba(var(--text-rgb),0.72)' }}>
+                      {p.desc}
+                      {!p.awarded && p.reason ? <span style={{ color: t.CORAL }}> — {p.reason}</span> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* AI feedback */}
           <div style={{ marginTop: 12, fontSize: 13.5, color: 'rgba(var(--text-rgb),0.75)', lineHeight: 1.55 }}>

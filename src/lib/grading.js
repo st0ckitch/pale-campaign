@@ -97,6 +97,63 @@ export function checkLocally(studentRaw, acceptedAnswers = []) {
 // LAYER 2 — AI semantic grading
 // ===========================================================================
 
+// Structured mark scheme: [{ code: 'M1'|'A1'|'R1'|'B1', desc }] — one entry per
+// mark point. Legacy string schemes stay as prose context (no per-point mode).
+export function schemePoints(question) {
+  const ms = question?.markScheme
+  if (!Array.isArray(ms)) return []
+  return ms
+    .filter((p) => p && String(p.desc || '').trim())
+    .map((p) => ({ code: String(p.code || 'B1'), desc: String(p.desc) }))
+}
+
+const fullPrompt = (q) => `${q.stem ? `${q.stem}\n` : ''}${q.prompt}`
+
+// Sanitize the model's per-point awards against the actual scheme (align by
+// order, fall back to code match) so the UI can never show phantom points.
+function sanitizePoints(raw, pts) {
+  const arr = Array.isArray(raw) ? raw : []
+  return pts.map((p, i) => {
+    const r = arr[i] && typeof arr[i] === 'object' ? arr[i] : arr.find((x) => x && x.code === p.code) || {}
+    return { code: p.code, desc: p.desc, awarded: !!r.awarded, reason: typeof r.reason === 'string' ? r.reason : '' }
+  })
+}
+
+export function parseSchemeJSON(text, pts) {
+  if (!text) throw new Error('empty')
+  let t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
+  const start = t.indexOf('{')
+  const end = t.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error('no json object')
+  const obj = JSON.parse(t.slice(start, end + 1))
+  const points = sanitizePoints(obj.points, pts)
+  const awarded = points.filter((p) => p.awarded).length
+  const score = pts.length ? awarded / pts.length : 0
+  return {
+    correct: awarded === pts.length,
+    equivalent: awarded === pts.length,
+    score,
+    points,
+    feedback: typeof obj.feedback === 'string' ? obj.feedback : '',
+    errorStep: obj.errorStep == null || obj.errorStep === 'null' ? null : String(obj.errorStep),
+    confidence: typeof obj.confidence === 'number' ? Math.max(0, Math.min(1, obj.confidence)) : null,
+  }
+}
+
+// The instruction block for per-point marking, shared by text and image paths.
+function schemeInstruction(pts) {
+  return (
+    'Mark scheme — award each point INDEPENDENTLY (a correct final answer with no ' +
+    'working still earns answer (A/B) points but method (M) points need visible method; ' +
+    'apply follow-through where reasonable):\n' +
+    pts.map((p, i) => `${i + 1}. [${p.code}] ${p.desc}`).join('\n') +
+    '\n\nReturn ONLY this JSON: { "points": [one object per mark point, IN ORDER: ' +
+    '{ "code": the point code, "awarded": true/false, "reason": "very short justification" }], ' +
+    '"feedback": "one sentence overall", "errorStep": "where they went wrong or null", ' +
+    '"confidence": how certain you are in this judgement, 0-1 }'
+  )
+}
+
 const GRADER_SYSTEM =
   'You are a precise, fair exam grader across all subjects (maths, sciences, ' +
   'humanities, languages). Decide whether the student answer is correct for the ' +
@@ -129,13 +186,35 @@ export function parseGraderJSON(text) {
 }
 
 // Grade a single free-text answer. Always returns a result object; never
-// throws. `local` is the Layer-1 result used as the fallback.
+// throws. `local` is the Layer-1 result used as the fallback. When the
+// question carries a structured mark scheme, every point is awarded
+// individually with a reason — that's what the review UI renders as chips.
 async function gradeTextWithAI(question, studentAnswer, local, signal) {
   const subject = question.subject ? `Subject: ${question.subject}\n` : ''
-  const scheme = question.markScheme ? `Mark scheme: ${question.markScheme}\n` : ''
+  const pts = schemePoints(question)
+
+  if (pts.length) {
+    const user =
+      subject +
+      `Question: ${fullPrompt(question)}\n` +
+      `Model answer: ${question.correctAnswer}\n` +
+      `Student's answer/working: ${studentAnswer}\n\n` +
+      schemeInstruction(pts)
+    const text = await callAnthropic({
+      system: GRADER_SYSTEM,
+      messages: [{ role: 'user', content: user }],
+      maxTokens: 1500,
+      temperature: 0,
+      model: MODEL,
+      signal,
+    })
+    return parseSchemeJSON(text, pts)
+  }
+
+  const scheme = typeof question.markScheme === 'string' && question.markScheme ? `Mark scheme: ${question.markScheme}\n` : ''
   const user =
     subject +
-    `Question: ${question.prompt}\n` +
+    `Question: ${fullPrompt(question)}\n` +
     `Expected answer: ${question.correctAnswer}\n` +
     scheme +
     `Student's answer: ${studentAnswer}\n\n` +
@@ -163,29 +242,35 @@ export function isImageAnswer(a) {
 // Grade a handwritten / drawn answer image with Claude vision.
 async function gradeImageWithAI(question, img, signal) {
   const subject = question.subject ? `Subject: ${question.subject}\n` : ''
-  const scheme = question.markScheme ? `Mark scheme: ${question.markScheme}\n` : ''
-  const promptText =
-    subject +
-    `Question: ${question.prompt}\n` +
-    `Expected answer: ${question.correctAnswer}\n` +
-    scheme +
-    "The image is the student's handwritten/drawn answer and working. Read it carefully and grade it.\n" +
-    'Return ONLY this JSON: ' +
-    '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
-    '"feedback": "one sentence", "errorStep": "where they went wrong or null", ' +
-    '"confidence": how certain you are in this judgement (lower if the handwriting is hard to read), 0-1 }'
+  const pts = schemePoints(question)
+  const promptText = pts.length
+    ? subject +
+      `Question: ${fullPrompt(question)}\n` +
+      `Model answer: ${question.correctAnswer}\n` +
+      "The image is the student's handwritten/drawn answer and working. Read it carefully.\n" +
+      schemeInstruction(pts) +
+      '\nLower the confidence if the handwriting is hard to read.'
+    : subject +
+      `Question: ${fullPrompt(question)}\n` +
+      `Expected answer: ${question.correctAnswer}\n` +
+      (typeof question.markScheme === 'string' && question.markScheme ? `Mark scheme: ${question.markScheme}\n` : '') +
+      "The image is the student's handwritten/drawn answer and working. Read it carefully and grade it.\n" +
+      'Return ONLY this JSON: ' +
+      '{ "correct": true/false, "equivalent": true/false, "score": 0-1, ' +
+      '"feedback": "one sentence", "errorStep": "where they went wrong or null", ' +
+      '"confidence": how certain you are in this judgement (lower if the handwriting is hard to read), 0-1 }'
   const text = await callAnthropic({
     system: GRADER_SYSTEM,
     messages: [{ role: 'user', content: [
       { type: 'text', text: promptText },
       { type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image } },
     ] }],
-    maxTokens: 1000,
+    maxTokens: 1500,
     temperature: 0,
     model: MODEL,
     signal,
   })
-  return parseGraderJSON(text)
+  return pts.length ? parseSchemeJSON(text, pts) : parseGraderJSON(text)
 }
 
 // ===========================================================================
@@ -220,6 +305,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           : `Not quite — the correct option is "${question.correctAnswer}".`,
       errorStep: null,
       confidence: 1,
+      points: null,
       needsReview: false,
     }
   }
@@ -234,6 +320,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       feedback: 'No answer entered.',
       errorStep: null,
       confidence: 1,
+      points: null,
       needsReview: false,
     }
   }
@@ -251,6 +338,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
         feedback: ai.feedback || (ai.correct ? 'Correct.' : 'Not quite.'),
         errorStep: ai.errorStep,
         confidence: ai.confidence,
+        points: ai.points ?? null,
       }
       return { ...out, needsReview: reviewFlag(out) }
     } catch (err) {
@@ -266,6 +354,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           : `Couldn't read that image clearly. Expected: ${question.correctAnswer}.`,
         errorStep: null,
         confidence: null,
+        points: null,
         needsReview: true,
       }
     }
@@ -278,6 +367,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
   // a one-line of feedback opportunistically. To keep grading snappy and robust
   // we only call AI when Layer 1 is uncertain (not a clean match).
   if (local.correct) {
+    const pts = schemePoints(question)
     return {
       id: question.id,
       answered: true,
@@ -287,6 +377,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       feedback: 'Correct — equivalent to the expected answer.',
       errorStep: null,
       confidence: 1,
+      points: pts.length ? pts.map((p) => ({ ...p, awarded: true, reason: 'Correct final answer' })) : null,
       needsReview: false,
     }
   }
@@ -302,6 +393,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
       feedback: ai.feedback || (ai.correct ? 'Correct.' : 'Not quite.'),
       errorStep: ai.errorStep,
       confidence: ai.confidence,
+      points: ai.points ?? null,
     }
     return { ...out, needsReview: reviewFlag(out) }
   } catch (err) {
@@ -320,6 +412,7 @@ export async function gradeQuestion(question, studentAnswer, signal) {
           : `Not quite. Expected: ${question.correctAnswer}.`,
       errorStep: null,
       confidence: null,
+      points: null,
       needsReview: !local.correct,
     }
   }

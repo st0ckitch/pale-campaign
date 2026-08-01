@@ -307,12 +307,56 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
   }
 }
 
-// Resolve an exam definition into a concrete question array the ExamModule can run.
-export function resolveQuestions(exam) {
+// The exam's questions exactly as authored (multi-part questions intact) —
+// what the teacher's editor works on.
+export function rawQuestions(exam) {
   const byId = Object.fromEntries(EXAM_QUESTIONS.map((q) => [q.id, q]))
   const seed = (exam.questionIds || []).map((id) => byId[id]).filter(Boolean)
   const custom = exam.customQuestions || []
   return [...seed, ...custom]
+}
+
+// Marks carried by one authored question (sum of its parts, or its own marks).
+export function questionMarks(q) {
+  if (Array.isArray(q.parts) && q.parts.length) {
+    return q.parts.reduce((s, p) => s + (Number(p.marks) || 1), 0)
+  }
+  return Number(q.marks) || 1
+}
+
+// Resolve an exam definition into the flat question array the ExamModule runs:
+// a multi-part question becomes consecutive items sharing a stem, labelled
+// 2(a), 2(b)… so grading, navigation and attempts stay per-part.
+export function resolveQuestions(exam) {
+  const out = []
+  let n = 0
+  for (const q of rawQuestions(exam)) {
+    n++
+    if (Array.isArray(q.parts) && q.parts.length) {
+      q.parts.forEach((p, i) => {
+        const letter = p.key || String.fromCharCode(97 + i)
+        out.push({
+          id: `${q.id}__${letter}`,
+          type: 'text',
+          subject: q.subject,
+          topic: q.topic,
+          stem: q.prompt,
+          partLabel: letter,
+          displayLabel: `${n}(${letter})`,
+          prompt: p.prompt || '',
+          latex: p.latex || '',
+          marks: Number(p.marks) || 1,
+          correctAnswer: p.correctAnswer || '',
+          acceptedAnswers: p.acceptedAnswers || [],
+          markScheme: p.markScheme,
+          workingNotes: p.workingNotes || q.workingNotes || '',
+        })
+      })
+    } else {
+      out.push({ ...q, displayLabel: String(n) })
+    }
+  }
+  return out
 }
 
 export function examMeta(exam) {
@@ -323,6 +367,8 @@ export function examMeta(exam) {
     description: exam.description || '',
     durationSeconds: (exam.durationMin || 20) * 60,
     passMark: Number(exam.passMark) >= 0 ? Number(exam.passMark) : 50,
+    boundaries: exam.boundaries || null,
+    paper: exam.paper || null,
   }
 }
 

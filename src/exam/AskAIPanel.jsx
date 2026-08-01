@@ -6,7 +6,8 @@ import Markdown from '../components/Markdown.jsx'
 // System prompts differ by phase to protect exam integrity.
 function systemFor(mode, question) {
   const base =
-    `The question the student is working on is:\n"${question.prompt}"\n` +
+    (question.stem ? `Context shared by all parts of this question:\n"${question.stem}"\n` : '') +
+    `The ${question.partLabel ? `part (${question.partLabel})` : 'question'} the student is working on is:\n"${question.prompt}"\n` +
     (question.type === 'mcq'
       ? `The options are: ${question.options.join(' | ')}.\n`
       : '')

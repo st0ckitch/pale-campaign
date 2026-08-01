@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { sub, fill } from '../theme.js'
-import { QUESTION_BANK, resolveQuestions } from '../lib/useContentStore.js'
+import { QUESTION_BANK, rawQuestions, questionMarks } from '../lib/useContentStore.js'
 import { scanPaper } from '../lib/vision.js'
+import { DEFAULT_BOUNDARIES } from '../exam/ExamModule.jsx'
 import QuestionEditor from './QuestionEditor.jsx'
 import { MarkingQueue, ClassInsights } from './TeacherInsights.jsx'
+import Predictions from './Predictions.jsx'
 
 const rid = (p) => p + Math.random().toString(36).slice(2, 9)
 const SUBJECT_SUGGESTIONS = [
@@ -40,6 +42,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
     ['exams', 'Exams', store.customExams.length || null],
     ['marking', 'Marking', reviewCount || null],
     ['insights', 'Insights', null],
+    ['predictions', 'Predicted grades', null],
     ['students', 'Students', store.mode === 'cloud-teacher' ? store.students.length || null : null],
     ['announcements', 'Announcements', store.announcements.length || null],
   ]
@@ -92,6 +95,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
       )}
       {view === 'marking' && <MarkingQueue t={t} store={store} toast={toast} />}
       {view === 'insights' && <ClassInsights t={t} store={store} toast={toast} aiOn={aiOn} onConnect={onConnect} />}
+      {view === 'predictions' && <Predictions t={t} store={store} toast={toast} label={label} inputStyle={inputStyle} />}
       {view === 'students' && (
         store.mode === 'cloud-teacher'
           ? <StudentsPanel t={t} store={store} toast={toast} label={label} inputStyle={inputStyle} />
@@ -126,9 +130,11 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
   const [description, setDescription] = useState('')
   const [passMark, setPassMark] = useState(50)
   const [customQs, setCustomQs] = useState([])
+  const [bounds, setBounds] = useState(() => ({ ...DEFAULT_BOUNDARIES }))
+  const [paper, setPaper] = useState({ course: '', level: '', paper: '', calculator: null })
 
   const isMaths = /math/i.test(subject)
-  const totalMarks = customQs.reduce((s, q) => s + (Number(q.marks) || 1), 0)
+  const totalMarks = customQs.reduce((s, q) => s + questionMarks(q), 0)
 
   const updateQ = (i, patch) => setCustomQs((qs) => qs.map((q, j) => (j === i ? { ...q, ...patch } : q)))
   const removeQ = (i) => setCustomQs((qs) => qs.filter((_, j) => j !== i))
@@ -144,6 +150,7 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
 
   function resetDraft() {
     setEditingId(null); setTitle(''); setSubject('Mathematics AA'); setDurationMin(20); setDue(''); setDescription(''); setPassMark(50); setCustomQs([])
+    setBounds({ ...DEFAULT_BOUNDARIES }); setPaper({ course: '', level: '', paper: '', calculator: null })
   }
 
   async function onScanFiles(e) {
@@ -179,18 +186,36 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
     setDue(exam.due && exam.due !== 'Anytime' ? exam.due : '')
     setDescription(exam.description || '')
     setPassMark(Number(exam.passMark) >= 0 ? Number(exam.passMark) : 50)
-    setCustomQs(resolveQuestions(exam).map((q) => ({ ...q, id: q.id || rid('q'), marks: q.marks || 1 })))
+    // rawQuestions keeps multi-part questions intact — resolveQuestions would
+    // flatten them into per-part items and destroy the structure on re-save.
+    setCustomQs(rawQuestions(exam).map((q) => ({ ...q, id: q.id || rid('q'), marks: q.marks || 1 })))
+    setBounds(exam.boundaries && typeof exam.boundaries === 'object' ? { ...DEFAULT_BOUNDARIES, ...exam.boundaries } : { ...DEFAULT_BOUNDARIES })
+    setPaper(exam.paper && typeof exam.paper === 'object'
+      ? { course: exam.paper.course || '', level: exam.paper.level || '', paper: exam.paper.paper || '', calculator: exam.paper.calculator ?? null }
+      : { course: '', level: '', paper: '', calculator: null })
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
   function save() {
     if (!title.trim()) { toast('Give the exam a title'); return }
-    const clean = customQs.filter((q) => (q.prompt || '').trim())
+    const clean = customQs.filter((q) => (q.prompt || '').trim() || (Array.isArray(q.parts) && q.parts.some((p) => (p.prompt || '').trim())))
     if (!clean.length) { toast('Add at least one question'); return }
+    // Boundaries: persist only when they differ from the defaults, so results
+    // can honestly say "indicative" vs "set by your teacher".
+    const bClean = {}
+    let bCustom = false
+    for (let g = 2; g <= 7; g++) {
+      const v = Math.round(Number(bounds[g]))
+      bClean[g] = Number.isFinite(v) && v > 0 && v <= 100 ? v : DEFAULT_BOUNDARIES[g]
+      if (bClean[g] !== DEFAULT_BOUNDARIES[g]) bCustom = true
+    }
+    const hasPaper = paper.course || paper.level || paper.paper || paper.calculator != null
     const payload = {
       title: title.trim(), subject: subject.trim() || 'General', durationMin: Number(durationMin) || 20,
       due: due.trim() || 'Anytime', description: description.trim(),
       passMark: Math.max(0, Math.min(100, Math.round(Number(passMark) || 0))),
+      boundaries: bCustom ? bClean : null,
+      paper: hasPaper ? { course: paper.course || null, level: paper.level || null, paper: paper.paper || null, calculator: paper.calculator } : null,
       questionIds: [], customQuestions: clean,
     }
     if (editingId) { store.updateExam(editingId, payload); toast('Exam updated') }
@@ -210,7 +235,7 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {store.customExams.map((e) => {
               const qn = (e.questionIds?.length || 0) + (e.customQuestions?.length || 0)
-              const marks = (e.customQuestions || []).reduce((s, q) => s + (Number(q.marks) || 1), 0) + (e.questionIds?.length || 0)
+              const marks = (e.customQuestions || []).reduce((s, q) => s + questionMarks(q), 0) + (e.questionIds?.length || 0)
               return (
                 <div key={e.id} style={{ padding: '14px 16px', borderRadius: 14, background: fill(0.03), border: `1px solid ${fill(0.08)}` }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}{editingId === e.id ? ' · editing…' : ''}</div>
@@ -245,6 +270,43 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
         <div style={{ marginTop: 14 }}>
           <label style={label}>Description / instructions (shown to students)</label>
           <textarea style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Answer all questions. Calculators allowed. Show your working." />
+        </div>
+
+        {/* IB paper settings + grade boundaries */}
+        <div style={{ marginTop: 14, padding: '16px 18px', borderRadius: 16, background: fill(0.03), border: `1px solid ${fill(0.08)}` }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+            IB paper settings
+            <span style={{ fontWeight: 500, fontSize: 12, color: sub(0.5) }}> · optional — shown on the exam cover and used for the grade</span>
+          </div>
+          <div style={{ display: 'flex', gap: 18, marginTop: 12, flexWrap: 'wrap' }}>
+            <PaperChips t={t} label="Course" value={paper.course} options={[['AA', 'Maths AA'], ['AI', 'Maths AI']]} onPick={(v) => setPaper((p) => ({ ...p, course: p.course === v ? '' : v }))} />
+            <PaperChips t={t} label="Level" value={paper.level} options={[['SL', 'SL'], ['HL', 'HL']]} onPick={(v) => setPaper((p) => ({ ...p, level: p.level === v ? '' : v }))} />
+            <PaperChips t={t} label="Paper" value={paper.paper} options={[['P1', 'Paper 1'], ['P2', 'Paper 2'], ['P3', 'Paper 3']]} onPick={(v) => setPaper((p) => ({ ...p, paper: p.paper === v ? '' : v }))} />
+            <PaperChips t={t} label="Calculator" value={paper.calculator === true ? 'yes' : paper.calculator === false ? 'no' : ''} options={[['yes', 'Allowed'], ['no', 'Not allowed']]} onPick={(v) => setPaper((p) => ({ ...p, calculator: (p.calculator === true && v === 'yes') || (p.calculator === false && v === 'no') ? null : v === 'yes' }))} />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ ...label, marginBottom: 0 }}>Grade boundaries (% needed for each IB grade)</span>
+              <button onClick={() => setBounds({ ...DEFAULT_BOUNDARIES })} style={{ background: 'none', border: 'none', color: t.accent, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, padding: 0 }}>Reset to defaults</button>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+              {[7, 6, 5, 4, 3, 2].map((g) => (
+                <div key={g} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: t.accent }}>{g} ≥</span>
+                  <input
+                    type="number" min="1" max="100"
+                    value={bounds[g] ?? ''}
+                    onChange={(e) => setBounds((b) => ({ ...b, [g]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                    style={{ ...inputStyle, width: 62, padding: '8px 8px', textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: 11.5, color: sub(0.5) }}>%</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: sub(0.45), marginTop: 8 }}>
+              Defaults are indicative. Set the real boundaries from the latest subject report and students see "N marks from an IB 6" on their results.
+            </div>
+          </div>
         </div>
 
         {/* scan pages */}
@@ -318,6 +380,36 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
           <span style={{ fontSize: 12.5, color: sub(0.5) }}>{customQs.length} question{customQs.length === 1 ? '' : 's'} · {totalMarks} mark{totalMarks === 1 ? '' : 's'} · {subject || 'General'}</span>
         </div>
       </section>
+    </div>
+  )
+}
+
+// Small labelled chip group for the IB paper settings. Clicking the selected
+// chip deselects it (the whole block is optional).
+function PaperChips({ t, label: lbl, value, options, onPick }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4), marginBottom: 6 }}>{lbl}</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {options.map(([val, name]) => {
+          const on = value === val
+          return (
+            <button
+              key={val}
+              onClick={() => onPick(val)}
+              style={{
+                padding: '6px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                fontFamily: "'Manrope',sans-serif",
+                border: `1px solid ${on ? t.hexA(t.accent, 0.55) : fill(0.12)}`,
+                background: on ? t.hexA(t.accent, 0.16) : '#FFFFFF',
+                color: on ? 'var(--ink)' : sub(0.6),
+              }}
+            >
+              {name}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
