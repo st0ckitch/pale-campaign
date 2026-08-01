@@ -119,7 +119,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.ctaInk }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4 2 9l10 5 10-5z" /><path d="M6 11v4c0 1 2.7 3 6 3s6-2 6-3v-4" /></svg>
         </div>
         <div>
@@ -168,7 +168,7 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
           </div>
           <button onClick={() => (aiOn ? fileRef.current?.click() : onConnect?.())} disabled={scanning} style={{ ...t.cta, padding: '12px 20px', opacity: scanning ? 0.6 : 1 }}>
             {scanning
-              ? <span style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid rgba(11,13,16,0.35)', borderTopColor: '#0B0D10', display: 'inline-block', animation: reduceMotion ? 'none' : 'qgspin .8s linear infinite' }} />
+              ? <span style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid rgba(255,255,255,0.45)', borderTopColor: 'currentColor', display: 'inline-block', animation: reduceMotion ? 'none' : 'qgspin .8s linear infinite' }} />
               : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z" /><circle cx="12" cy="13" r="3.2" /></svg>}
             {scanning ? 'Scanning…' : aiOn ? 'Scan pages' : 'Connect AI to scan'}
           </button>

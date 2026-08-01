@@ -29,7 +29,7 @@ export default function ConnectAI({ t, apiKey, onSave, onClose }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10', fontWeight: 700 }}>AI</div>
+          <div style={{ width: 34, height: 34, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.ctaInk, fontWeight: 700 }}>AI</div>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Connect AI</div>
         </div>
         <p style={{ fontSize: 13.5, lineHeight: 1.6, color: sub(0.65), margin: '8px 0 16px' }}>

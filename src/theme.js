@@ -33,12 +33,16 @@ export const GLASS = {
 export function getTheme(brand) {
   const accent = brand === 'BIST' ? '#FFC83D' : '#5B8CFF'
   const accent2 = brand === 'BIST' ? '#FFA63D' : '#8C7CFF'
-  const glow = 1
+  // Text color that stays readable ON the accent gradient.
+  const ctaInk = brand === 'BIST' ? '#241D08' : '#FFFFFF'
+  // Soft shadows — the UI sits on a light canvas, heavy glows read as noise.
+  const glow = 0.45
 
   return {
     brand,
     accent,
     accent2,
+    ctaInk,
     glow,
     INK,
     OK,
@@ -61,9 +65,9 @@ export function getTheme(brand) {
       fontFamily: "'Space Grotesk',sans-serif",
       fontWeight: 700,
       fontSize: 15,
-      color: '#0B0D10',
+      color: ctaInk,
       background: `linear-gradient(135deg,${accent},${accent2})`,
-      boxShadow: `0 8px 26px ${hexA(accent, 0.4 * glow)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
+      boxShadow: `0 6px 18px ${hexA(accent, 0.35 * glow)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
     },
 
     // primary accent pill CTA
@@ -71,17 +75,17 @@ export function getTheme(brand) {
       display: 'inline-flex',
       alignItems: 'center',
       gap: 10,
-      padding: '15px 26px',
+      padding: '14px 24px',
       borderRadius: 999,
       border: `1px solid ${hexA(accent, 0.5)}`,
       background: `linear-gradient(135deg,${accent},${accent2})`,
-      color: '#0B0D10',
+      color: ctaInk,
       fontWeight: 700,
-      fontSize: 15,
+      fontSize: 14.5,
       fontFamily: "'Manrope',sans-serif",
       cursor: 'pointer',
       transition: `all .22s ${EASE}`,
-      boxShadow: `0 14px 38px ${hexA(accent, 0.4 * glow)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
+      boxShadow: `0 10px 26px ${hexA(accent, 0.4 * glow)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
     },
 
     // subtle accent-tinted "ghost" button
@@ -92,7 +96,7 @@ export function getTheme(brand) {
       padding: '11px 18px',
       borderRadius: 999,
       border: `1px solid ${hexA(accent, 0.45)}`,
-      background: hexA(accent, 0.12),
+      background: hexA(accent, 0.1),
       color: INK,
       fontWeight: 600,
       fontSize: 13,
@@ -106,7 +110,7 @@ export function getTheme(brand) {
       inset: 0,
       pointerEvents: 'none',
       animation: 'qgbloom 22s ease-in-out infinite',
-      background: `radial-gradient(46% 38% at 50% -4%, rgba(var(--fill-rgb), ${0.1 * glow}) 0%, transparent 62%), radial-gradient(40% 34% at 72% 2%, ${hexA(accent, 0.11 * glow)} 0%, transparent 58%)`,
+      background: `radial-gradient(50% 40% at 60% -6%, ${hexA(accent, 0.1)} 0%, transparent 60%)`,
     },
   }
 }
@@ -121,28 +125,28 @@ export function pill(t, on) {
     cursor: 'pointer',
     transition: `all .2s ${t.EASE}`,
     fontFamily: "'Manrope',sans-serif",
-    border: `1px solid ${on ? t.hexA(t.accent, 0.5) : fill(0.12)}`,
-    background: on ? t.hexA(t.accent, 0.16) : fill(0.04),
-    color: on ? INK : sub(0.62),
-    boxShadow: on ? `0 0 18px ${t.hexA(t.accent, 0.22 * t.glow)}` : 'none',
+    border: `1px solid ${on ? t.hexA(t.accent, 0.55) : fill(0.14)}`,
+    background: on ? t.hexA(t.accent, 0.18) : '#FFFFFF',
+    color: on ? INK : sub(0.6),
   }
 }
 
-// left-rail nav button
+// left-rail nav item: icon + label
 export function navStyle(t, on) {
   return {
     position: 'relative',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 46,
-    height: 46,
+    gap: 5,
+    width: 66,
+    padding: '10px 4px',
     borderRadius: 14,
     cursor: 'pointer',
     transition: `all .25s ${t.EASE}`,
-    border: `1px solid ${on ? t.hexA(t.accent, 0.4) : 'transparent'}`,
-    background: on ? t.hexA(t.accent, 0.13) : 'transparent',
-    color: on ? t.accent : sub(0.45),
-    boxShadow: on ? `0 0 22px ${t.hexA(t.accent, 0.26 * t.glow)}` : 'none',
+    border: `1px solid ${on ? t.hexA(t.accent, 0.45) : 'transparent'}`,
+    background: on ? t.hexA(t.accent, 0.14) : 'transparent',
+    color: on ? INK : sub(0.55),
   }
 }

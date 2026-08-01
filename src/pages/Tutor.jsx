@@ -14,7 +14,7 @@ const CHIPS = ['Explain step-by-step', 'Give me a hint', 'Quiz me on this']
 
 export default function Tutor({ t, reduceMotion, aiOn, onConnect, toast }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hi Nino — I'm your AI tutor. Ask me anything, paste a question, or tell me a topic and I'll build your understanding step by step." },
+    { role: 'assistant', text: "Hi — I'm your AI tutor. Ask me anything, paste a question, or tell me a topic and I'll build your understanding step by step." },
   ])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,10 +63,10 @@ export default function Tutor({ t, reduceMotion, aiOn, onConnect, toast }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 20, animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both`, minHeight: 0 }}>
+    <div style={{ maxWidth: 860, width: '100%', margin: '0 auto', animation: reduceMotion ? 'none' : `qgfade .4s ${t.EASE} both`, minHeight: 0 }}>
       <div style={{ ...t.GLASS, borderRadius: 24, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)', overflow: 'hidden' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${fill(0.07)}`, display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10', fontWeight: 700 }}>AI</div>
+          <div style={{ width: 34, height: 34, borderRadius: 11, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.ctaInk, fontWeight: 700 }}>AI</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>AI Tutor</div>
             <div style={{ fontSize: 11.5, color: aiOn ? t.OK : sub(0.5), display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -99,32 +99,11 @@ export default function Tutor({ t, reduceMotion, aiOn, onConnect, toast }) {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 8px 8px 16px', borderRadius: 16, background: 'var(--input-bg)', border: `1px solid ${fill(0.1)}` }}>
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} placeholder="Ask anything…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--ink)', fontSize: 14, fontFamily: "'Manrope',sans-serif" }} />
-            <button onClick={() => send()} disabled={busy} aria-label="Send" style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: busy ? 'default' : 'pointer', background: `linear-gradient(135deg,${t.accent},${t.accent2})`, color: '#0B0D10', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: busy ? 0.6 : 1 }}>
+            <button onClick={() => send()} disabled={busy} aria-label="Send" style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: busy ? 'default' : 'pointer', background: `linear-gradient(135deg,${t.accent},${t.accent2})`, color: t.ctaInk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: busy ? 0.6 : 1 }}>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
             </button>
           </div>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ ...t.GLASS, borderRadius: 24, padding: '22px 24px' }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4) }}>Current focus</div>
-          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 9 }}>Algebra · Quadratics</div>
-          <div style={{ height: 7, borderRadius: 999, background: fill(0.08), marginTop: 14, overflow: 'hidden' }}><div style={{ width: '62%', height: '100%', borderRadius: 999, background: `linear-gradient(90deg,${t.accent},${t.accent2})` }} /></div>
-          <div style={{ fontSize: 12, color: sub(0.5), marginTop: 8 }}>62% mastery · 4 of 9 sub-skills secure</div>
-        </div>
-        <div style={{ ...t.GLASS, borderRadius: 24, padding: '22px 24px' }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4), marginBottom: 13 }}>Detected weak spots</div>
-          {['Factorising harder quadratics', 'Simultaneous equations', 'Rearranging formulae (improving)'].map((w, i) => (
-            <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, marginBottom: 10, color: i === 2 ? sub(0.6) : 'var(--ink)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: i === 2 ? sub(0.3) : t.CORAL, boxShadow: i === 2 ? 'none' : `0 0 7px ${t.CORAL}` }} />{w}
-            </div>
-          ))}
-        </div>
-        <button style={{ ...t.cta, justifyContent: 'center', width: '100%' }} onClick={() => toast('Turning this into a mock exam…')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
-          Turn this into a quiz
-        </button>
       </div>
     </div>
   )

@@ -738,7 +738,7 @@ function GradingSkeleton({ t, reduceMotion }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10', fontWeight: 700, fontSize: 12 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.ctaInk, fontWeight: 700, fontSize: 12 }}>
           AI
         </div>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Grading your exam…</div>
@@ -890,7 +890,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
           </div>
           <div style={{ ...t.GLASS, borderRadius: 24, padding: '22px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B0D10', fontWeight: 700, fontSize: 12 }}>AI</div>
+              <div style={{ width: 28, height: 28, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.ctaInk, fontWeight: 700, fontSize: 12 }}>AI</div>
               <span style={{ fontSize: 14, fontWeight: 700 }}>Where to focus next</span>
             </div>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(var(--text-rgb),0.7)', margin: 0 }}>

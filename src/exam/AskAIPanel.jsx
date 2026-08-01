@@ -159,7 +159,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#0B0D10',
+              color: t.ctaInk,
               fontWeight: 700,
               flexShrink: 0,
             }}
@@ -329,7 +329,7 @@ export default function AskAIPanel({ question, mode, theme: t, onClose, reduceMo
                 border: 'none',
                 cursor: busy ? 'default' : 'pointer',
                 background: `linear-gradient(135deg,${t.accent},${t.accent2})`,
-                color: '#0B0D10',
+                color: t.ctaInk,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
