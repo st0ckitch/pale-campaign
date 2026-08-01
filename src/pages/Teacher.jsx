@@ -435,11 +435,13 @@ function StudentsPanel({ t, store, toast, label, inputStyle }) {
       <section style={{ ...t.GLASS, borderRadius: 24, padding: '24px 26px' }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Add a student</div>
         <div style={{ fontSize: 12.5, color: sub(0.55), marginTop: 4, marginBottom: 14 }}>
-          The account gets a one-time password and an invite link. If the server has an email key, the invite is emailed automatically — either way you can copy and share it below.
+          Only the Student ID is required. Every new account gets a one-time password and an invite link shown below —
+          copy and send them yourself (WhatsApp, print, in person). Email is optional: when the server has an email key
+          configured, invites are also emailed automatically.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1.2fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div><label style={label}>Student ID *</label><input style={inputStyle} value={sid} onChange={(e) => setSid(e.target.value)} placeholder="S12345" /></div>
-          <div><label style={label}>Email</label><input style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@school.ge" /></div>
+          <div><label style={label}>Email (optional)</label><input style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@school.ge" /></div>
           <div><label style={label}>Name</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" /></div>
           <div>
             <label style={label}>Class</label>
@@ -457,7 +459,9 @@ function StudentsPanel({ t, store, toast, label, inputStyle }) {
           <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: t.hexA(t.accent, 0.08), border: `1px solid ${t.hexA(t.accent, 0.35)}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>
               Invite for {lastInvite.student.name || lastInvite.student.id}
-              <span style={{ fontWeight: 500, color: sub(0.55) }}> · {lastInvite.emailSent ? 'emailed ✓' : 'not emailed — share it yourself'}</span>
+              <span style={{ fontWeight: 500, color: sub(0.55) }}>
+                {' '}· {lastInvite.emailSent ? 'emailed ✓' : 'email off — copy the link or password below and send it to the student'}
+              </span>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <button style={{ ...t.ghostBtn, padding: '8px 14px' }} onClick={() => copyText(inviteLinkFor(lastInvite.inviteToken), toast, 'Invite link copied')}>
