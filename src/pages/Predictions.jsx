@@ -45,6 +45,7 @@ const fmtPct = (v) => {
 
 export default function Predictions({ t, store, toast, label, inputStyle }) {
   const [rows, setRows] = useState(loadRows)
+  const [showMath, setShowMath] = useState(false)
 
   useEffect(() => {
     try {
@@ -122,6 +123,16 @@ export default function Predictions({ t, store, toast, label, inputStyle }) {
           this tool argues its case and shows the risk, it never submits anything.
         </p>
 
+        <button
+          onClick={() => setShowMath((v) => !v)}
+          style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", background: showMath ? t.hexA(t.accent, 0.14) : fill(0.04), border: `1px solid ${showMath ? t.hexA(t.accent, 0.5) : fill(0.12)}`, color: showMath ? 'var(--ink)' : sub(0.65) }}
+        >
+          <span style={{ transform: showMath ? 'rotate(90deg)' : 'none', transition: 'transform .15s', display: 'inline-block' }}>›</span>
+          {showMath ? 'Hide the formula explanation' : 'How the formula works — full explanation'}
+        </button>
+
+        {showMath && <FormulaExplainer t={t} />}
+
         {/* add student */}
         <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', alignItems: 'end' }}>
           <div style={{ minWidth: 200 }}>
@@ -162,6 +173,120 @@ export default function Predictions({ t, store, toast, label, inputStyle }) {
           inputStyle={inputStyle}
         />
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Term-by-term walkthrough of the prediction formula, using the same worked
+// example ("Alex", Physics HL) that ships as the first demo card below — so
+// every number here can be checked against a live card.
+// ---------------------------------------------------------------------------
+function FormulaExplainer({ t }) {
+  const mono = { fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700 }
+  const h = { fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: sub(0.4) }
+  const body = { fontSize: 12.5, lineHeight: 1.65, color: sub(0.7), margin: 0 }
+  const exBox = { marginTop: 8, padding: '8px 12px', borderRadius: 10, background: t.hexA(t.accent, 0.06), border: `1px solid ${t.hexA(t.accent, 0.22)}`, fontSize: 12, color: sub(0.75), lineHeight: 1.6 }
+  const sym = (s) => (
+    <span style={{ ...mono, fontSize: 12, padding: '2px 9px', borderRadius: 999, background: t.hexA(t.accent, 0.12), border: `1px solid ${t.hexA(t.accent, 0.35)}`, color: t.accent, whiteSpace: 'nowrap' }}>{s}</span>
+  )
+
+  const TERMS = [
+    {
+      s: 'IAₛ', name: 'Internal Assessment signal',
+      what: <>The student's IA mark converted to a percentage, then <strong style={{ color: 'var(--ink)' }}>calibrated by your school's historical moderation drift μ</strong>. The IBO re-marks a sample of every school's IAs; if your department is consistently moderated down, raw teacher marks systematically over-predict — so the drift is applied before the IA is allowed to count.</>,
+      ex: <>Alex's IA: 21/24 = 87.5%. School's Physics IAs historically moderated <strong>−8.3%</strong> → calibrated IAₛ = <strong>79.2%</strong>.</>,
+    },
+    {
+      s: 'w₁ · w₂', name: 'Component weights',
+      what: <>The IA's official share of the final subject grade (≈20% in maths and sciences, ≈30% in essay subjects) — w₂ = 1 − w₁ goes to the exam signal, mirroring how the IBO itself combines coursework and papers. If one signal is missing (no IA yet, or no mocks), its weight transfers to the other rather than dragging the composite to zero.</>,
+      ex: <>Physics HL: w₁ = 0.20, w₂ = 0.80 → 0.20 × 79.2 = <strong>15.84</strong> and 0.80 × 71.15 = <strong>56.92</strong>.</>,
+    },
+    {
+      s: 'Mockₛ', name: 'Timed exam signal',
+      what: <>Scores from past papers sat under strict timed conditions — the single best predictor of exam-day performance. The three sits are <strong style={{ color: 'var(--ink)' }}>recency-weighted 15% / 35% / 50%</strong> (oldest → newest): the DP2 final mock says the most about where the student is now, but the DP1 baseline still anchors against one lucky paper. Classwork and homework are deliberately excluded — they measure effort in a familiar environment, not execution under pressure.</>,
+      ex: <>Alex: 0.15×62 + 0.35×71 + 0.50×74 = <strong>71.15%</strong>.</>,
+    },
+    {
+      s: 'Trendₛ', name: 'Learning trajectory (w₃ term)',
+      what: <>A least-squares slope fitted across the mock series, then <strong style={{ color: 'var(--ink)' }}>damped by half and capped at ±5%</strong>. A genuinely rising student isn't anchored to their DP1 score (the anti-under-prediction guard), but a single good paper can't inflate the composite either. A falling series subtracts the same way.</>,
+      ex: <>Alex: 62 → 71 → 74 fits a slope of +6 per mock → damped to <strong>+3.0%</strong>.</>,
+    },
+    {
+      s: 'ε', name: 'Stress / execution variance',
+      what: <>How much this particular student typically drops between untimed work and timed exam-hall conditions — time management, exam anxiety, silly slips under pressure. Until the app has enough timed-vs-untimed history to compute it per student, it's an editable estimate (default −1.5%).</>,
+      ex: <>Alex loses ≈1.5% to time pressure on long Paper 2 questions → ε = <strong>−1.5%</strong>.</>,
+    },
+    {
+      s: 'M̂ₛ', name: 'Composite percentage',
+      what: <>The sum of everything above — the engine's best single estimate of the raw mark the student would score if the final exam were sat tomorrow.</>,
+      ex: <>Alex: 15.84 + 56.92 + 3.0 − 1.5 = <strong>M̂ = 74.26%</strong>.</>,
+    },
+    {
+      s: 'HistoricalShiftₛ', name: 'Boundary adjustment (w₄ term) — the Monte Carlo stage',
+      what: <>IB grade boundaries are not fixed: the 7-boundary in a subject can sit at 67% one session and 73% the next, set after everyone has sat the paper. So comparing M̂ against a single cut-off is guesswork. Instead the engine runs <strong style={{ color: 'var(--ink)' }}>{ENGINE.runs} simulated exam sessions</strong>. Each run draws (1) one session-difficulty shift ~ N(0, {ENGINE.boundarySigma}%) applied to every boundary together — an easy paper raises them all — and (2) one exam-day performance draw for the student ~ N(M̂, {ENGINE.examSigma}%). The run's grade is wherever the simulated score lands among the simulated boundaries; counting all runs turns the single composite into a probability per grade.</>,
+      ex: <>Alex vs the Physics HL history (7 ≥ ~70%): in 812 of 1,000 simulated sessions his draw clears the shifted 7-boundary, in 188 it doesn't → <strong>P(7) = 81%, P(6) = 19%</strong>.</>,
+    },
+  ]
+
+  return (
+    <div style={{ marginTop: 14, padding: '18px 20px', borderRadius: 16, background: fill(0.03), border: `1px solid ${fill(0.09)}` }}>
+      {/* the formula itself */}
+      <div style={h}>The formula</div>
+      <div style={{ marginTop: 10, padding: '14px 18px', borderRadius: 12, background: '#FFFFFF', border: `1px solid ${fill(0.1)}`, overflowX: 'auto' }}>
+        <div style={{ ...mono, fontSize: 16, whiteSpace: 'nowrap' }}>
+          M̂ₛ <span style={{ color: sub(0.45) }}>=</span> <span style={{ color: t.accent }}>w₁·IAₛ</span> <span style={{ color: sub(0.45) }}>+</span> <span style={{ color: t.accent }}>w₂·Mockₛ</span> <span style={{ color: sub(0.45) }}>+</span> <span style={{ color: t.accent }}>Trendₛ</span> <span style={{ color: sub(0.45) }}>+</span> <span style={{ color: t.accent }}>ε</span>
+          <span style={{ color: sub(0.45) }}>  →  Monte Carlo ×{ENGINE.runs} vs shifted boundaries  →  </span>
+          <span style={{ color: t.OK }}>P(grade 1…7)</span>
+        </div>
+      </div>
+      <p style={{ ...body, marginTop: 8, fontSize: 11.5, color: sub(0.5) }}>
+        Same architecture as the reference model M̂ₛ = w₁·IAₛ + w₂·Mockₛ + w₃·Trendₛ + w₄·HistoricalShiftₛ + ε — the
+        w₃ term is the damped trajectory bonus below, and the w₄ HistoricalShift term is applied where it belongs
+        mathematically: not as a bonus on the student's score, but as the random movement of the grade boundaries
+        inside the Monte Carlo simulation.
+      </p>
+
+      {/* term by term */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+        {TERMS.map((term) => (
+          <div key={term.name} style={{ padding: '12px 14px', borderRadius: 12, background: '#FFFFFF', border: `1px solid ${fill(0.08)}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 6 }}>
+              {sym(term.s)}
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{term.name}</span>
+            </div>
+            <p style={body}>{term.what}</p>
+            <div style={exBox}><strong style={{ color: t.accent }}>Worked example (Alex, Physics HL):</strong> {term.ex}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* the two guards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(52,199,150,0.06)', border: '1px solid rgba(52,199,150,0.3)' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: t.OK, marginBottom: 5 }}>Guard against over-predicting</div>
+          <p style={body}>
+            The moderation drift deflates optimistic internal marks before they count, and any prediction whose top
+            grade is under <strong style={{ color: 'var(--ink)' }}>60% confidence is flagged volatile</strong> — the
+            model refuses to present a coin-flip as a safe number. A teacher seeing Alex's raw 87.5% IA might call
+            him a certain 7; the engine knows the department gets moderated −8.3% and prices that in.
+          </p>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: t.hexA(t.accent, 0.05), border: `1px solid ${t.hexA(t.accent, 0.25)}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: t.accent, marginBottom: 5 }}>Guard against under-predicting</div>
+          <p style={body}>
+            The trajectory term stops a rising student being anchored to old evidence. A strict teacher seeing
+            Alex's 62% DP1 mock might refuse to predict a 7; the engine sees 62 → 71 → 74, adds the damped +3%
+            trend, and the simulation shows the 7 is in fact the 81%-likely outcome.
+          </p>
+        </div>
+      </div>
+
+      <p style={{ ...body, marginTop: 12, fontSize: 11.5, color: sub(0.5) }}>
+        Every card below shows this exact pipeline applied to its own inputs under "Why — full working", so any
+        prediction can be audited number by number. Randomness is seeded per student — the same inputs always
+        reproduce the same probabilities.
+      </p>
     </div>
   )
 }
