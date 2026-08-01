@@ -64,6 +64,9 @@ export const api = {
   teacherState: (token) => req('/api/teacher/state', { token }),
   createClass: (token, name) => req('/api/teacher/classes', { method: 'POST', body: { name }, token }),
   deleteClass: (token, id) => req(`/api/teacher/classes/${id}`, { method: 'DELETE', token }),
+  addStudent: (token, student) => req('/api/teacher/students', { method: 'POST', body: student, token }),
+  reinviteStudent: (token, id) => req(`/api/teacher/students/${encodeURIComponent(id)}/reinvite`, { method: 'POST', body: {}, token }),
+  deleteStudent: (token, id) => req(`/api/teacher/students/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   createExam: (token, exam) => req('/api/teacher/exams', { method: 'POST', body: exam, token }),
   updateExam: (token, id, patch) => req(`/api/teacher/exams/${id}`, { method: 'PUT', body: patch, token }),
   deleteExam: (token, id) => req(`/api/teacher/exams/${id}`, { method: 'DELETE', token }),
@@ -72,8 +75,11 @@ export const api = {
   patchAttemptItem: (token, attemptId, index, patch) =>
     req(`/api/teacher/attempts/${attemptId}`, { method: 'PATCH', body: { index, patch }, token }),
   clearAttempts: (token) => req('/api/teacher/attempts', { method: 'DELETE', token }),
-  // student
-  join: (code, name) => req('/api/join', { method: 'POST', body: { code, name } }),
-  studentState: (code) => req(`/api/student/state?code=${encodeURIComponent(code)}`),
-  postAttempt: (code, attempt) => req('/api/student/attempts', { method: 'POST', body: { code, attempt } }),
+  // student accounts
+  studentLogin: (id, password) => req('/api/student/login', { method: 'POST', body: { id, password } }),
+  inviteInfo: (token) => req(`/api/invite?token=${encodeURIComponent(token)}`),
+  acceptInvite: (token, password) => req('/api/invite/accept', { method: 'POST', body: { token, password } }),
+  changePassword: (token, password) => req('/api/student/password', { method: 'POST', body: { password }, token }),
+  studentState: (token) => req('/api/student/state', { token }),
+  postAttempt: (token, attempt) => req('/api/student/attempts', { method: 'POST', body: { attempt }, token }),
 }

@@ -5,9 +5,10 @@ import { MODEL } from '../lib/config.js'
 import Markdown from '../components/Markdown.jsx'
 
 const SYSTEM =
-  'You are a friendly, encouraging tutor for IGCSE/GCSE and A-Level students ' +
-  '(maths, sciences, English). Explain clearly and concisely, show worked steps ' +
-  'when helpful, and check understanding with a short follow-up question. You may ' +
+  'You are a friendly, encouraging tutor for students at an IB school (MYP and ' +
+  'Diploma Programme) — maths (AA/AI), sciences, English and humanities. Explain ' +
+  'clearly and concisely, show worked steps when helpful, use IB command terms ' +
+  'where natural, and check understanding with a short follow-up question. You may ' +
   'give full answers here — this is study mode, not an exam.'
 
 const CHIPS = ['Explain step-by-step', 'Give me a hint', 'Quiz me on this']
@@ -93,7 +94,7 @@ export default function Tutor({ t, reduceMotion, aiOn, onConnect, toast }) {
         <div style={{ padding: '14px 18px 18px', borderTop: `1px solid ${fill(0.07)}` }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 11, flexWrap: 'wrap' }}>
             {CHIPS.map((c) => (
-              <button key={c} disabled={busy} onClick={() => send(c === 'Explain step-by-step' ? 'Explain how to factorise a quadratic, step by step.' : c === 'Give me a hint' ? 'Give me a hint for solving simultaneous equations.' : 'Quiz me with one IGCSE algebra question.')}
+              <button key={c} disabled={busy} onClick={() => send(c === 'Explain step-by-step' ? 'Explain how to factorise a quadratic, step by step.' : c === 'Give me a hint' ? 'Give me a hint for solving simultaneous equations.' : 'Quiz me with one IB-style algebra question.')}
                 style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', fontFamily: "'Manrope',sans-serif", background: fill(0.05), border: `1px solid ${fill(0.12)}`, color: sub(0.7), opacity: busy ? 0.5 : 1 }}>{c}</button>
             ))}
           </div>

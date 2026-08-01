@@ -847,7 +847,7 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
             </span>
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(var(--text-rgb),0.5)', marginTop: 6, textAlign: 'center' }}>
-            Pass mark {passMark}% · {meta.title}
+            Pass mark {passMark}% · IB band indicative — boundaries vary by session
           </div>
           <button style={{ ...t.ghostBtn, marginTop: 18 }} onClick={onRestart}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -921,18 +921,17 @@ function Results({ t, results, answers, questions, total, meta, reduceMotion, on
   )
 }
 
-// GCSE-style 9–1 grade band from the marks percentage.
+// Indicative IB 1–7 grade from the marks percentage. Real IB boundaries
+// vary by subject and session — this is guidance, not an official conversion.
 function gradeBand(pct) {
   const p = pct * 100
-  if (p >= 90) return 'Grade 9'
-  if (p >= 80) return 'Grade 8'
-  if (p >= 70) return 'Grade 7'
-  if (p >= 60) return 'Grade 6'
-  if (p >= 50) return 'Grade 5'
-  if (p >= 40) return 'Grade 4'
-  if (p >= 30) return 'Grade 3'
-  if (p >= 20) return 'Grade 2'
-  return 'Grade 1'
+  if (p >= 80) return 'IB grade 7'
+  if (p >= 65) return 'IB grade 6'
+  if (p >= 52) return 'IB grade 5'
+  if (p >= 40) return 'IB grade 4'
+  if (p >= 27) return 'IB grade 3'
+  if (p >= 14) return 'IB grade 2'
+  return 'IB grade 1'
 }
 
 function ReviewCard({ t, q, r, studentAnswer, onAsk, onPractice, genBusy }) {

@@ -49,14 +49,14 @@ function load() {
 
 export function useContentStore({ cloud = false, session = null, notify, onAuthError } = {}) {
   const [data, setData] = useState(load)
-  const [cloudData, setCloudData] = useState({ classes: [], exams: [], announcements: [], attempts: [] })
+  const [cloudData, setCloudData] = useState({ classes: [], students: [], exams: [], announcements: [], attempts: [] })
   const [syncing, setSyncing] = useState(false)
 
   const mode =
     cloud && session?.role === 'teacher' ? 'cloud-teacher'
     : cloud && session?.role === 'student' ? 'cloud-student'
     : 'local'
-  const token = session?.role === 'teacher' ? session.token : null
+  const token = session?.token || null
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -86,12 +86,13 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
         const s = await api.teacherState(token)
         setCloudData({
           classes: s.classes || [],
+          students: s.students || [],
           exams: s.exams || [],
           announcements: s.announcements || [],
           attempts: s.attempts || [],
         })
       } else {
-        const s = await api.studentState(session.classCode)
+        const s = await api.studentState(token)
         setCloudData((d) => ({ ...d, exams: s.exams || [], announcements: s.announcements || [] }))
       }
     } catch (err) {
@@ -99,7 +100,7 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     } finally {
       setSyncing(false)
     }
-  }, [mode, token, session?.classCode, fail])
+  }, [mode, token, fail])
 
   useEffect(() => {
     refresh()
@@ -150,9 +151,9 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     setData((d) => ({ ...d, attempts: [attempt, ...(d.attempts || [])].slice(0, 40) }))
   const saveAttempt = (attempt) => {
     if (mode === 'cloud-student') {
-      const record = { ...attempt, student: session.name }
-      api.postAttempt(session.classCode, record).catch((err) => {
-        saveAttemptLocal(record) // don't lose the work — keep it on-device
+      // The server stamps the student's identity from their session token.
+      api.postAttempt(token, attempt).catch((err) => {
+        saveAttemptLocal({ ...attempt, student: session.name || session.id })
         fail(err, 'Sending your result to the teacher')
       })
       return
@@ -212,7 +213,7 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     setData((d) => ({ ...d, announcements: d.announcements.filter((a) => a.id !== id) }))
   }
 
-  // ---- classes (cloud-teacher only) ---------------------------------------------
+  // ---- classes & students (cloud-teacher only) ------------------------------------
   const addClass = (name) => {
     if (mode !== 'cloud-teacher') return
     api.createClass(token, name)
@@ -223,6 +224,28 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     if (mode !== 'cloud-teacher') return
     setCloudData((d) => ({ ...d, classes: d.classes.filter((c) => c.id !== id) }))
     api.deleteClass(token, id).catch((err) => fail(err, 'Removing the class'))
+  }
+
+  // These return promises so the Students panel can show the generated
+  // one-time password and invite link.
+  const addStudent = (payload) => {
+    if (mode !== 'cloud-teacher') return Promise.reject(new Error('not connected to the school server'))
+    return api.addStudent(token, payload).then((r) => {
+      setCloudData((d) => ({ ...d, students: [...d.students, r.student] }))
+      return r
+    })
+  }
+  const reinviteStudent = (id) => {
+    if (mode !== 'cloud-teacher') return Promise.reject(new Error('not connected to the school server'))
+    return api.reinviteStudent(token, id).then((r) => {
+      setCloudData((d) => ({ ...d, students: d.students.map((s) => (s.id === id ? r.student : s)) }))
+      return r
+    })
+  }
+  const deleteStudent = (id) => {
+    if (mode !== 'cloud-teacher') return
+    setCloudData((d) => ({ ...d, students: d.students.filter((s) => s.id !== id) }))
+    api.deleteStudent(token, id).catch((err) => fail(err, 'Removing the student'))
   }
 
   // ---- practice sets: always personal, always local -----------------------------
@@ -258,6 +281,10 @@ export function useContentStore({ cloud = false, session = null, notify, onAuthE
     classes: mode === 'cloud-teacher' ? cloudData.classes : [],
     addClass,
     deleteClass,
+    students: mode === 'cloud-teacher' ? cloudData.students : [],
+    addStudent,
+    reinviteStudent,
+    deleteStudent,
     practiceSets: data.practiceSets || [],
     addPracticeSet,
     deletePracticeSet,

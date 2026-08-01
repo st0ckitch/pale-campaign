@@ -1,28 +1,27 @@
 // ---------------------------------------------------------------------------
-// Learning Hub backend — the "platform spine".
+// Learning Hub backend — self-hosted Node alternative to the Supabase Edge
+// Function (supabase/functions/api/index.ts). Identical API:
 //
-// A single-file, zero-dependency Node server (Node 18+) that provides what
-// static hosting cannot:
-//   • POST /api/anthropic        — Anthropic proxy; the API key stays server-side
-//   • POST /api/teacher/login    — teacher sign-in with a per-school access key
-//   • class join-codes           — students join a class once, by code + name
-//   • synced content             — exams & announcements a teacher publishes are
-//                                  visible to every student device, and student
-//                                  attempts flow back to the teacher's queue
-//   • static hosting of dist/    — one host runs the whole app
+//   Open:      GET /api/health · POST /api/anthropic · POST /api/teacher/login
+//              POST /api/student/login · GET /api/invite?token= · POST /api/invite/accept
+//   Student:   GET /api/student/state · POST /api/student/password · POST /api/student/attempts
+//   Teacher:   GET /api/teacher/state · classes/students/exams/announcements CRUD ·
+//              PATCH/DELETE /api/teacher/attempts
 //
-// Storage is a single JSON file (atomic tmp+rename writes) — deliberately
-// simple pilot infrastructure for a two-school deployment, not a general SaaS.
-// Run on any Node host:
+// Student accounts are created by a teacher (ID + email). The server generates
+// a one-time password and an invite link (emailed via Resend when configured);
+// the student sets their own password and signs in with ID + password.
 //
-//   ANTHROPIC_API_KEY=sk-ant-...  TEACHER_KEY=choose-a-secret  node server/index.mjs
+// Zero dependencies (Node 18+). Storage: one JSON file with atomic writes.
 //
 // Env vars:
 //   PORT                  default 8787
 //   ANTHROPIC_API_KEY     enables AI grading/tutor/scanning for every client
 //   APP_ANTHROPIC_BASE_URL  override the Anthropic API base (rarely needed)
-//   TEACHER_KEY           teacher access key for all schools
-//   TEACHER_KEY_BGA / TEACHER_KEY_BIST   per-school overrides
+//   TEACHER_KEY           teacher access key (or TEACHER_KEY_BGA)
+//   RESEND_API_KEY        optional — emails invites via resend.com
+//   EMAIL_FROM            optional — sender address for invites
+//   APP_URL               optional — site URL used in invite emails
 //   DATA_FILE             where to persist (default <repo>/server/data.json)
 //   ALLOWED_ORIGIN        CORS origin for split hosting (default *)
 // ---------------------------------------------------------------------------
@@ -39,7 +38,7 @@ const UPSTREAM = process.env.APP_ANTHROPIC_BASE_URL || 'https://api.anthropic.co
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json')
 const DIST_DIR = path.join(__dirname, '..', 'dist')
 const ORIGIN = process.env.ALLOWED_ORIGIN || '*'
-const SCHOOLS = ['BGA', 'BIST']
+const SCHOOLS = ['BGA']
 
 const teacherKeyFor = (school) =>
   process.env[`TEACHER_KEY_${school}`] || process.env.TEACHER_KEY || ''
@@ -48,7 +47,7 @@ const teacherKeyFor = (school) =>
 // Persistence — load once, save debounced with atomic rename.
 // ---------------------------------------------------------------------------
 function blankData() {
-  return { tokens: {}, classes: [], exams: [], announcements: [], attempts: [] }
+  return { tokens: {}, studentTokens: {}, classes: [], students: [], exams: [], announcements: [], attempts: [] }
 }
 
 let data = blankData()
@@ -74,15 +73,33 @@ function save() {
 }
 
 const rid = (p) => p + crypto.randomBytes(6).toString('hex')
+const newToken = () => crypto.randomBytes(24).toString('hex')
 
-// Join codes avoid ambiguous characters (0/O, 1/I/L).
+// Codes avoid ambiguous characters (0/O, 1/I/L).
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+function randomCode(len) {
+  let code = ''
+  for (let i = 0; i < len; i++) code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)]
+  return code
+}
 function newClassCode() {
   for (;;) {
-    let code = ''
-    for (let i = 0; i < 6; i++) code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)]
+    const code = randomCode(6)
     if (!data.classes.some((c) => c.code === code)) return code
   }
+}
+
+// ---- password hashing (PBKDF2-SHA256, same format as the Edge Function) ----
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16)
+  const h = crypto.pbkdf2Sync(String(password), salt, 100000, 32, 'sha256')
+  return `pbkdf2$100000$${salt.toString('hex')}$${h.toString('hex')}`
+}
+function verifyPassword(password, stored) {
+  const parts = String(stored || '').split('$')
+  if (parts.length !== 4) return false
+  const h = crypto.pbkdf2Sync(String(password), Buffer.from(parts[2], 'hex'), Number(parts[1]) || 100000, 32, 'sha256')
+  return h.toString('hex') === parts[3]
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +129,7 @@ function readBody(req, limitBytes) {
   })
 }
 
-async function readJSON(req, limitBytes = 5 * 1024 * 1024) {
+async function readJSON(req, limitBytes = 8 * 1024 * 1024) {
   const raw = await readBody(req, limitBytes)
   try {
     return raw ? JSON.parse(raw) : {}
@@ -121,28 +138,89 @@ async function readJSON(req, limitBytes = 5 * 1024 * 1024) {
   }
 }
 
-// Teacher auth: Authorization: Bearer <token issued by /api/teacher/login>.
-function teacherAuth(req) {
+const bearer = (req) => {
   const m = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')
-  const rec = m && data.tokens[m[1]]
+  return m ? m[1] : ''
+}
+
+function teacherAuth(req) {
+  const rec = data.tokens[bearer(req)]
   if (!rec) throw Object.assign(new Error('not signed in as a teacher'), { status: 401 })
   return rec // { school, createdAt }
 }
 
-function classByCode(code) {
-  const c = data.classes.find((k) => k.code === String(code || '').trim().toUpperCase())
-  if (!c) throw Object.assign(new Error('unknown class code'), { status: 404 })
-  return c
+function studentAuth(req) {
+  const rec = data.studentTokens[bearer(req)]
+  const s = rec && data.students.find((x) => x.school === rec.school && x.id === rec.studentId)
+  if (!s) throw Object.assign(new Error('not signed in'), { status: 401 })
+  return s
+}
+
+const classNameFor = (school, classCode) => {
+  if (!classCode) return null
+  const c = data.classes.find((k) => k.school === school && k.code === classCode)
+  return c ? c.name : null
+}
+
+// Public student shape (never includes the password hash).
+function studentPub(s, withInvite = false) {
+  return {
+    id: s.id,
+    name: s.name,
+    email: s.email,
+    school: s.school,
+    classCode: s.classCode || null,
+    className: classNameFor(s.school, s.classCode),
+    mustChange: !!s.mustChange,
+    activatedAt: s.activatedAt || null,
+    createdAt: s.createdAt,
+    ...(withInvite ? { inviteToken: s.inviteToken || null } : {}),
+  }
+}
+
+function issueStudentToken(s) {
+  const token = newToken()
+  data.studentTokens[token] = { school: s.school, studentId: s.id, createdAt: Date.now() }
+  save()
+  return token
+}
+
+// Best-effort invite email via Resend (skipped when not configured).
+async function sendInviteEmail(student, otp, inviteToken) {
+  const key = process.env.RESEND_API_KEY
+  const to = String(student.email || '').trim()
+  if (!key || !to) return false
+  const appUrl = (process.env.APP_URL || '').replace(/\/$/, '')
+  const link = appUrl ? `${appUrl}/#invite=${inviteToken}` : ''
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM || 'Learning Hub <onboarding@resend.dev>',
+        to: [to],
+        subject: 'Your Learning Hub account',
+        html:
+          `<p>Hi ${student.name || student.id},</p>` +
+          `<p>Your teacher created a Learning Hub account for you.</p>` +
+          `<p><b>Student ID:</b> ${student.id}<br/><b>One-time password:</b> ${otp}</p>` +
+          (link
+            ? `<p><a href="${link}">Click here to set your own password</a> — then sign in with your Student ID.</p>`
+            : `<p>Open the school Learning Hub, sign in with your Student ID and this one-time password, and you'll be asked to set your own password.</p>`),
+      }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
 }
 
 // Simple per-IP sliding-window rate limit for the AI proxy.
 const aiCalls = new Map() // ip -> [timestamps]
 function aiRateLimited(ip) {
   const now = Date.now()
-  const windowMs = 60_000
-  const max = 40
-  const arr = (aiCalls.get(ip) || []).filter((t) => now - t < windowMs)
-  if (arr.length >= max) {
+  const arr = (aiCalls.get(ip) || []).filter((t) => now - t < 60_000)
+  if (arr.length >= 40) {
     aiCalls.set(ip, arr)
     return true
   }
@@ -166,12 +244,13 @@ function recomputeEarned(attempt) {
 async function handleApi(req, res, url) {
   const route = `${req.method} ${url.pathname}`
 
-  // ---- open endpoints -----------------------------------------------------
+  // ---- open endpoints -------------------------------------------------------
   if (route === 'GET /api/health') {
     return json(res, 200, {
       ok: true,
       service: 'learning-hub',
       ai: !!process.env.ANTHROPIC_API_KEY,
+      email: !!process.env.RESEND_API_KEY,
       schools: SCHOOLS,
     })
   }
@@ -184,8 +263,7 @@ async function handleApi(req, res, url) {
         message: 'ANTHROPIC_API_KEY is not set on the server. Falling back to local grading.',
       })
     }
-    const ip = req.socket.remoteAddress || 'unknown'
-    if (aiRateLimited(ip)) {
+    if (aiRateLimited(req.socket.remoteAddress || 'unknown')) {
       return json(res, 429, { error: 'rate_limited', message: 'Too many AI requests — try again in a minute.' })
     }
     // Vision payloads (scanned papers, photographed answers) can be large.
@@ -210,59 +288,89 @@ async function handleApi(req, res, url) {
 
   if (route === 'POST /api/teacher/login') {
     const { school, key } = await readJSON(req)
-    const s = String(school || '').toUpperCase()
+    const s = String(school || SCHOOLS[0]).toUpperCase()
     if (!SCHOOLS.includes(s)) return json(res, 400, { error: 'unknown school' })
     const expected = teacherKeyFor(s)
-    if (!expected) return json(res, 503, { error: `no teacher key configured for ${s} (set TEACHER_KEY or TEACHER_KEY_${s})` })
+    if (!expected) return json(res, 503, { error: `no teacher key configured for ${s} (set TEACHER_KEY)` })
     if (String(key || '') !== expected) return json(res, 403, { error: 'wrong access key' })
-    const token = crypto.randomBytes(24).toString('hex')
+    const token = newToken()
     data.tokens[token] = { school: s, createdAt: Date.now() }
     save()
     return json(res, 200, { token, school: s })
   }
 
-  if (route === 'POST /api/join') {
-    const { code, name } = await readJSON(req)
-    const cleanName = String(name || '').trim().slice(0, 60)
-    if (!cleanName) return json(res, 400, { error: 'name required' })
-    const cls = classByCode(code)
-    if (!cls.roster.includes(cleanName)) {
-      cls.roster.push(cleanName)
-      save()
+  if (route === 'POST /api/student/login') {
+    const { id, password } = await readJSON(req)
+    const cleanId = String(id || '').trim().toUpperCase()
+    const s = data.students.find((x) => x.id === cleanId)
+    if (!s || !verifyPassword(password, s.passwordHash)) {
+      return json(res, 403, { error: 'wrong student ID or password' })
     }
-    return json(res, 200, { school: cls.school, classCode: cls.code, className: cls.name, name: cleanName })
+    return json(res, 200, { token: issueStudentToken(s), mustChange: !!s.mustChange, student: studentPub(s) })
   }
 
+  if (route === 'GET /api/invite') {
+    const token = String(url.searchParams.get('token') || '')
+    const s = token && data.students.find((x) => x.inviteToken === token)
+    if (!s) return json(res, 404, { error: 'This invite link is no longer valid — ask your teacher for a new one.' })
+    return json(res, 200, { id: s.id, name: s.name, school: s.school })
+  }
+
+  if (route === 'POST /api/invite/accept') {
+    const { token, password } = await readJSON(req)
+    if (String(password || '').length < 6) return json(res, 400, { error: 'password must be at least 6 characters' })
+    const s = token && data.students.find((x) => x.inviteToken === String(token))
+    if (!s) return json(res, 404, { error: 'This invite link is no longer valid — ask your teacher for a new one.' })
+    s.passwordHash = hashPassword(password)
+    s.mustChange = false
+    s.inviteToken = null
+    s.activatedAt = Date.now()
+    save()
+    return json(res, 200, { token: issueStudentToken(s), student: studentPub(s) })
+  }
+
+  // ---- student endpoints ------------------------------------------------------
   if (route === 'GET /api/student/state') {
-    const cls = classByCode(url.searchParams.get('code'))
+    const s = studentAuth(req)
     return json(res, 200, {
-      school: cls.school,
-      className: cls.name,
-      classCode: cls.code,
-      exams: data.exams.filter((e) => e.school === cls.school),
-      announcements: data.announcements.filter((a) => a.school === cls.school),
+      student: studentPub(s),
+      exams: data.exams.filter((e) => e.school === s.school),
+      announcements: data.announcements.filter((a) => a.school === s.school),
     })
   }
 
+  if (route === 'POST /api/student/password') {
+    const s = studentAuth(req)
+    const { password } = await readJSON(req)
+    if (String(password || '').length < 6) return json(res, 400, { error: 'password must be at least 6 characters' })
+    s.passwordHash = hashPassword(password)
+    s.mustChange = false
+    s.inviteToken = null
+    s.activatedAt = s.activatedAt || Date.now()
+    save()
+    return json(res, 200, { ok: true })
+  }
+
   if (route === 'POST /api/student/attempts') {
-    const { code, attempt } = await readJSON(req, 8 * 1024 * 1024)
-    const cls = classByCode(code)
+    const s = studentAuth(req)
+    const { attempt } = await readJSON(req)
     if (!attempt || !Array.isArray(attempt.items)) return json(res, 400, { error: 'attempt required' })
     const rec = {
       ...attempt,
       id: rid('a'),
-      school: cls.school,
-      classCode: cls.code,
-      className: cls.name,
+      school: s.school,
+      studentId: s.id,
+      student: s.name || s.id,
+      classCode: s.classCode || null,
+      className: classNameFor(s.school, s.classCode),
       ts: Date.now(),
     }
     recomputeEarned(rec)
     data.attempts.unshift(rec)
-    // Bound growth: keep the most recent attempts per school.
-    const bySchool = data.attempts.filter((a) => a.school === cls.school)
+    const bySchool = data.attempts.filter((a) => a.school === s.school)
     if (bySchool.length > 400) {
       const keep = new Set(bySchool.slice(0, 400).map((a) => a.id))
-      data.attempts = data.attempts.filter((a) => a.school !== cls.school || keep.has(a.id))
+      data.attempts = data.attempts.filter((a) => a.school !== s.school || keep.has(a.id))
     }
     save()
     return json(res, 200, { id: rec.id })
@@ -276,6 +384,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, {
       school,
       classes: data.classes.filter((c) => c.school === school),
+      students: data.students.filter((s) => s.school === school).map((s) => studentPub(s, true)),
       exams: data.exams.filter((e) => e.school === school),
       announcements: data.announcements.filter((a) => a.school === school),
       attempts: data.attempts.filter((a) => a.school === school),
@@ -295,6 +404,57 @@ async function handleApi(req, res, url) {
   let m = /^DELETE \/api\/teacher\/classes\/(.+)$/.exec(route)
   if (m) {
     data.classes = data.classes.filter((c) => !(c.id === m[1] && c.school === school))
+    save()
+    return json(res, 200, { ok: true })
+  }
+
+  if (route === 'POST /api/teacher/students') {
+    const { id, email, name, classCode } = await readJSON(req)
+    const cleanId = String(id || '').trim().toUpperCase().slice(0, 40)
+    if (!cleanId) return json(res, 400, { error: 'student ID required' })
+    if (data.students.some((s) => s.school === school && s.id === cleanId)) {
+      return json(res, 409, { error: `student ${cleanId} already exists` })
+    }
+    const otp = randomCode(8)
+    const inviteToken = newToken()
+    const s = {
+      school,
+      id: cleanId,
+      name: String(name || '').trim().slice(0, 80),
+      email: String(email || '').trim().slice(0, 120),
+      classCode: String(classCode || '').trim().toUpperCase() || null,
+      passwordHash: hashPassword(otp),
+      mustChange: true,
+      inviteToken,
+      createdAt: Date.now(),
+      activatedAt: null,
+    }
+    data.students.push(s)
+    save()
+    const emailSent = await sendInviteEmail(s, otp, inviteToken)
+    return json(res, 200, { student: studentPub(s, true), otp, inviteToken, emailSent })
+  }
+
+  m = /^POST \/api\/teacher\/students\/(.+)\/reinvite$/.exec(route)
+  if (m) {
+    const s = data.students.find((x) => x.school === school && x.id === decodeURIComponent(m[1]))
+    if (!s) return json(res, 404, { error: 'student not found' })
+    const otp = randomCode(8)
+    s.passwordHash = hashPassword(otp)
+    s.mustChange = true
+    s.inviteToken = newToken()
+    save()
+    const emailSent = await sendInviteEmail(s, otp, s.inviteToken)
+    return json(res, 200, { student: studentPub(s, true), otp, inviteToken: s.inviteToken, emailSent })
+  }
+
+  m = /^DELETE \/api\/teacher\/students\/(.+)$/.exec(route)
+  if (m) {
+    const sid = decodeURIComponent(m[1])
+    data.students = data.students.filter((s) => !(s.school === school && s.id === sid))
+    for (const [tok, rec] of Object.entries(data.studentTokens)) {
+      if (rec.school === school && rec.studentId === sid) delete data.studentTokens[tok]
+    }
     save()
     return json(res, 200, { ok: true })
   }
@@ -415,9 +575,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Learning Hub backend on http://localhost:${PORT}`)
-  console.log(`  AI proxy:     ${process.env.ANTHROPIC_API_KEY ? 'enabled' : 'DISABLED (set ANTHROPIC_API_KEY)'}`)
+  console.log(`  AI proxy:      ${process.env.ANTHROPIC_API_KEY ? 'enabled' : 'DISABLED (set ANTHROPIC_API_KEY)'}`)
+  console.log(`  Invite emails: ${process.env.RESEND_API_KEY ? 'enabled' : 'disabled (set RESEND_API_KEY to send)'}`)
   for (const s of SCHOOLS) {
-    console.log(`  ${s} teacher key: ${teacherKeyFor(s) ? 'configured' : 'NOT SET (set TEACHER_KEY or TEACHER_KEY_' + s + ')'}`)
+    console.log(`  ${s} teacher key: ${teacherKeyFor(s) ? 'configured' : 'NOT SET (set TEACHER_KEY)'}`)
   }
-  console.log(`  Data file:    ${DATA_FILE}`)
+  console.log(`  Data file:     ${DATA_FILE}`)
 })

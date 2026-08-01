@@ -88,8 +88,11 @@ One-time Supabase setup:
    main then apply `supabase/migrations/` (the tables) automatically.
    *(No integration? Paste `supabase/migrations/20260801000000_init.sql` into
    SQL Editor → Run instead.)*
-2. **Edge Functions → Secrets** → add `ANTHROPIC_API_KEY` and `TEACHER_KEY`
-   (optionally `TEACHER_KEY_BGA` / `TEACHER_KEY_BIST` for separate keys).
+2. **Edge Functions → Secrets** → add `ANTHROPIC_API_KEY` and `TEACHER_KEY`.
+   Optional, for emailed student invites: `RESEND_API_KEY` (resend.com),
+   `EMAIL_FROM` (verified sender) and `APP_URL` (your site URL, used in the
+   email's invite link). Without them, teachers share invite links/one-time
+   passwords directly from the Students tab.
 3. Deploy the function if the integration hasn't already: **Edge Functions →
    Deploy a new function** → name it exactly `api`, paste the contents of
    `supabase/functions/api/index.ts`, deploy — then in the function's settings

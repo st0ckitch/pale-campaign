@@ -132,7 +132,9 @@ export const EXAM_QUESTIONS = [
 ]
 
 export const EXAM_META = {
-  title: 'IGCSE Mathematics Mock',
-  subtitle: 'Mixed topics · No calculator',
+  // Named honestly: these seed questions are foundation-level warm-ups, not
+  // DP-level material. Teachers publish real IB papers via scan/generate.
+  title: 'Maths Skills Warm-up',
+  subtitle: 'Foundation skills · No calculator',
   durationSeconds: 20 * 60, // 20:00
 }
