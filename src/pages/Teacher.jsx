@@ -3,6 +3,7 @@ import { sub, fill } from '../theme.js'
 import { QUESTION_BANK, rawQuestions, questionMarks } from '../lib/useContentStore.js'
 import { scanPaper } from '../lib/vision.js'
 import { DEFAULT_BOUNDARIES } from '../exam/ExamModule.jsx'
+import { verifyQuestions } from '../lib/verify.js'
 import QuestionEditor from './QuestionEditor.jsx'
 import { MarkingQueue, ClassInsights } from './TeacherInsights.jsx'
 import Predictions from './Predictions.jsx'
@@ -121,6 +122,9 @@ export default function Teacher({ t, store, toast, reduceMotion, onGo, aiOn, onC
 function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label, inputStyle }) {
   const fileRef = useRef(null)
   const [scanning, setScanning] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [verifyDone, setVerifyDone] = useState(0)
+  const [verifyResults, setVerifyResults] = useState(null)
 
   const [editingId, setEditingId] = useState(null)
   const [title, setTitle] = useState('')
@@ -151,6 +155,54 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
   function resetDraft() {
     setEditingId(null); setTitle(''); setSubject('Mathematics AA'); setDurationMin(20); setDue(''); setDescription(''); setPassMark(50); setCustomQs([])
     setBounds({ ...DEFAULT_BOUNDARIES }); setPaper({ course: '', level: '', paper: '', calculator: null })
+    setVerifyResults(null)
+  }
+
+  // Re-solve every question with AI and compare against the recorded key.
+  // Catches keys the scanner derived itself (papers usually have no answer key).
+  async function runVerify() {
+    const qs = customQs.filter((q) => (q.prompt || '').trim() || (Array.isArray(q.parts) && q.parts.some((p) => (p.prompt || '').trim())))
+    if (!qs.length) { toast('Add questions first'); return }
+    if (!aiOn) { toast('Connect AI first to verify answers'); onConnect?.(); return }
+    setVerifying(true)
+    setVerifyDone(0)
+    setVerifyResults(null)
+    try {
+      const res = await verifyQuestions(qs, subject, { onProgress: (d) => setVerifyDone(d) })
+      setVerifyResults(res)
+      const flagged = Object.values(res).filter((r) => r.status === 'mismatch').length
+      const unsure = Object.values(res).filter((r) => r.status === 'unsure' || r.status === 'error').length
+      toast(flagged
+        ? `${flagged} answer${flagged === 1 ? '' : 's'} flagged — review below`
+        : unsure
+          ? 'No disagreements, but some checks were uncertain — see below'
+          : 'AI agrees with every answer key ✓')
+    } catch (err) {
+      toast(`Verify failed: ${err?.message || 'try again'}`)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  // Accept the AI's suggested answer for one question.
+  function applySuggestion(i, q, r) {
+    if (!r?.myAnswer) return
+    let next = r.myAnswer
+    if (q.type === 'mcq' && Array.isArray(q.options)) {
+      const hit = q.options.find((o) => o.toLowerCase().trim() === r.myAnswer.toLowerCase().trim())
+      if (hit) next = hit
+      else {
+        // AI may answer "B. 42" or just "B" — try to resolve a letter/prefix to an option
+        const lm = r.myAnswer.trim().match(/^([A-Fa-f])\b/)
+        if (lm) {
+          const byLetter = q.options[lm[1].toUpperCase().charCodeAt(0) - 65]
+          if (byLetter) next = byLetter
+        }
+      }
+    }
+    updateQ(i, { correctAnswer: next })
+    setVerifyResults((prev) => (prev ? { ...prev, [q.id]: { ...prev[q.id], status: 'applied' } } : prev))
+    toast('Answer key updated')
   }
 
   async function onScanFiles(e) {
@@ -334,6 +386,13 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
           <span style={{ ...label, marginBottom: 0 }}>Questions ({customQs.length})</span>
           <button onClick={() => addBlank('text')} style={{ ...t.ghostBtn, padding: '8px 14px' }}>+ Written</button>
           <button onClick={() => addBlank('mcq')} style={{ ...t.ghostBtn, padding: '8px 14px' }}>+ Multiple choice</button>
+          {customQs.length > 0 && (
+            <button onClick={runVerify} disabled={verifying} title="AI re-solves every question independently and flags any answer key it disagrees with" style={{ ...t.ghostBtn, padding: '8px 14px', marginLeft: 'auto', opacity: verifying ? 0.6 : 1 }}>
+              {verifying
+                ? <><span style={{ width: 13, height: 13, borderRadius: 999, border: `2px solid ${t.hexA(t.accent, 0.3)}`, borderTopColor: t.accent, display: 'inline-block', animation: reduceMotion ? 'none' : 'qgspin .8s linear infinite' }} /> Checking {verifyDone}/{customQs.filter((q) => (q.prompt || '').trim() || (Array.isArray(q.parts) && q.parts.some((p) => (p.prompt || '').trim()))).length}…</>
+                : <>✓ Verify answers with AI</>}
+            </button>
+          )}
         </div>
 
         {isMaths && (
@@ -352,20 +411,45 @@ function ExamsTab({ t, store, toast, aiOn, onConnect, onGo, reduceMotion, label,
         {/* editable question list */}
         {customQs.length > 0 && (
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {customQs.map((q, i) => (
-              <QuestionEditor
-                key={q.id}
-                t={t}
-                q={q}
-                index={i}
-                onChange={(patch) => updateQ(i, patch)}
-                onRemove={() => removeQ(i)}
-                onMoveUp={() => moveQ(i, -1)}
-                onMoveDown={() => moveQ(i, 1)}
-                canUp={i > 0}
-                canDown={i < customQs.length - 1}
-              />
-            ))}
+            {customQs.map((q, i) => {
+              const v = verifyResults?.[q.id]
+              const vColor = v && (v.status === 'ok' ? t.OK : v.status === 'applied' ? t.OK : v.status === 'mismatch' ? t.CORAL : t.accent)
+              return (
+                <div key={q.id}>
+                  <QuestionEditor
+                    t={t}
+                    q={q}
+                    index={i}
+                    onChange={(patch) => updateQ(i, patch)}
+                    onRemove={() => removeQ(i)}
+                    onMoveUp={() => moveQ(i, -1)}
+                    onMoveDown={() => moveQ(i, 1)}
+                    canUp={i > 0}
+                    canDown={i < customQs.length - 1}
+                  />
+                  {v && (
+                    <div style={{ marginTop: 6, padding: '10px 14px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.5, background: t.hexA(vColor, 0.08), border: `1px solid ${t.hexA(vColor, 0.35)}`, display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, color: vColor, flexShrink: 0 }}>
+                        {v.status === 'ok' && '✓ AI agrees with this answer'}
+                        {v.status === 'applied' && '✓ Suggestion applied'}
+                        {v.status === 'mismatch' && '⚠ AI disagrees with this answer'}
+                        {v.status === 'unsure' && '? AI agrees, but with low confidence'}
+                        {v.status === 'error' && '! Check failed'}
+                      </span>
+                      <span style={{ color: sub(0.7), flex: 1, minWidth: 160 }}>
+                        {v.status === 'mismatch' && v.myAnswer ? <>AI's answer: <b style={{ color: 'var(--ink)' }}>{v.myAnswer}</b>{v.note ? ` — ${v.note}` : ''}</> : v.note}
+                        {v.confidence !== null && v.status !== 'applied' ? ` (confidence ${Math.round(v.confidence * 100)}%)` : ''}
+                      </span>
+                      {v.status === 'mismatch' && v.myAnswer && (
+                        <button onClick={() => applySuggestion(i, q, v)} style={{ padding: '5px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", border: `1px solid ${t.hexA(t.OK, 0.5)}`, background: t.hexA(t.OK, 0.14), color: 'var(--ink)', flexShrink: 0 }}>
+                          Use AI's answer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 
